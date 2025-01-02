@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+    <h2>Welcome to the Home Page</h2>
+    <div class="mt-4">
+        <a href="{{ url_for('login.login') }}" class="btn btn-primary">Login</a>
+        <a href="{{ url_for('login.register') }}" class="btn btn-secondary">Register</a>
+    </div>
+{% endblock %}
