@@ -10,7 +10,16 @@
     <div class="container py-5">
         <h1 class="mb-4 text-center">Login</h1>
 
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="alert alert-warning" role="alert">
+                    {{ messages[0] }}
+                </div>
+            {% endif %}
+        {% endwith %}
+
         <form method="POST" action="/login">
+
             <div class="mb-3">
                 <label for="login-username" class="form-label">Username</label>
                 <input type="text" class="form-control" id="login-username" name="login-username" required>

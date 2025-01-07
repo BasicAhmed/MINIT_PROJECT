@@ -3,7 +3,6 @@ from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from datetime import timedelta
 import os
-from utils import get_access_token, get_flights, extract_flight_details
 from models import db, Users, Bookings
 from config import Config
 
@@ -14,24 +13,19 @@ app.config.from_object(Config)
 # Initialize SQLAlchemy with the app
 db.init_app(app)
 
+# Set the secret key
+app.config['SECRET_KEY'] = os.getenv('APP_SECRET_KEY', 'fallback_secret_key')
+
 # Create tables
 with app.app_context():
     db.create_all()
 
-# Set the secret key
-app.config['SECRET_KEY'] = os.getenv('APP_SECRET_KEY', 'fallback_secret_key')
-
-
 # Routes
 @app.route('/', methods=["POST", 'GET'])
 def home():
-    if "user" not in session or not session.get("user"):
-        return redirect(url_for("login"))  # Redirect to login if user is not logged in
-    
-    # Load options from file
     try:
         with open('static/airport_lists.txt', 'r') as file:
-            options = [line.strip() for line in file if line.strip()]  # Remove empty lines
+            options = [line.strip() for line in file if line.strip()]
     except FileNotFoundError:
         options = []
 
@@ -81,17 +75,19 @@ def home():
             flash("Invalid or unusable promo code!")
             return redirect(url_for("home"))
 
-    return render_template("index.html", profile_Name=session["user"], options=options)
+    return render_template("home.html", options=options)
 
 @app.route('/register', methods=["POST", "GET"])
 def register():
-    if "user" in session and session["user"]:
-        return redirect(url_for("home"))
-
     if request.method == "POST":
         try:
             new_ic = int(request.form["reg-ic"])
-            new_user = Users.query.filter((Users.icNumber == str(new_ic)) | (Users.email == request.form["reg-email"]) | (Users.username == request.form["reg-username"])).first()
+            new_user = Users.query.filter(
+                (Users.icNumber == str(new_ic)) | 
+                (Users.email == request.form["reg-email"]) | 
+                (Users.username == request.form["reg-username"])
+            ).first()
+
             if new_user:
                 flash("User with provided details already exists!")
             else:
@@ -105,6 +101,7 @@ def register():
                 )
                 db.session.add(new_user)
                 db.session.commit()
+                flash("Registration successful! Please log in.")
                 return redirect(url_for("login"))
         except ValueError:
             flash("Please enter a valid IC Number.")
@@ -117,6 +114,7 @@ def login():
         if user and user.password == request.form["login-password"]:
             session.permanent = True
             session["user"] = user.username
+            flash("Login successful!")
             return redirect(url_for("home"))
         flash("Invalid Username or Password!")
     return render_template("login.html")
