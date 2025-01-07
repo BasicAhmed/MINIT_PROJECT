@@ -3,7 +3,6 @@ from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from datetime import timedelta
 import os
-from utils import get_access_token, get_flights, extract_flight_details
 from models import db, Users, Bookings
 from config import Config
 
