@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% include 'admin/flight_modals.html' %}
+
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Dashboard Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-speedometer2"></i> Flight Management</h2>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addFlightModal">
+            <i class="bi bi-plus-circle"></i> Add Flight
+        </button>
+    </div>
+
+    <!-- Flight Management Table -->
+    <div class="card shadow-lg">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Flight</th>
+                            <th>Route</th>
+                            <th>Schedule</th>
+                            <th>Capacity</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for flight in flights %}
+                        <tr>
+                            <!-- Flight Details -->
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-airplane fs-4 me-3"></i>
+                                    <div>
+                                        <div class="fw-bold">{{ flight.flightNum }}</div>
+                                        <small class="text-muted">{{ flight.airline }}</small>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- Route Information -->
+                            <td>
+                                <div class="flight-route">
+                                    <div class="text-primary">{{ flight.origin }}</div>
+                                    <i class="bi bi-arrow-right mx-2"></i>
+                                    <div class="text-primary">{{ flight.destination }}</div>
+                                </div>
+                            </td>
+
+                            <!-- Schedule -->
+                            <td>
+                                <div>{{ flight.date.strftime('%d %b %Y') }}</div>
+                                <small class="text-muted">
+                                    {{ flight.departureTime.strftime('%H:%M') }} - 
+                                    {{ flight.arrivalTime.strftime('%H:%M') }}
+                                </small>
+                            </td>
+
+                            <!-- Capacity -->
+                            <td>
+                                <div class="progress" style="height: 20px;">
+                                    {% set occupancy = ((flight.availableSeats / 180) * 100)|round %}
+                                    <div class="progress-bar bg-{{ 'success' if occupancy > 30 else 'warning' }}" 
+                                         role="progressbar" 
+                                         style="width: {{ occupancy }}%">
+                                        {{ flight.availableSeats }} seats
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- Status -->
+                            <td>
+                                {% if flight.date < current_date %}
+                                <span class="badge bg-secondary">Completed</span>
+                                {% elif flight.date == current_date %}
+                                <span class="badge bg-warning">Today</span>
+                                {% else %}
+                                <span class="badge bg-success">Upcoming</span>
+                                {% endif %}
+                            </td>
+
+                            <!-- Actions -->
+                            <td>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-primary"
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#editFlightModal"
+                                            data-flight-id="{{ flight.id }}"
+                                            data-flight-data="{{ flight|tojson|forceescape }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    
+                                    <form action="{{ url_for('delete_flight', flight_id=flight.id) }}" 
+                                          method="POST" 
+                                          onsubmit="return confirm('Delete this flight permanently?')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modals -->
+{% include 'admin/flight_modals.html' %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Edit Modal Handler
+    const editModal = document.getElementById('editFlightModal');
+    editModal.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const flightData = JSON.parse(button.dataset.flightData);
+        const form = document.getElementById('editFlightForm');
+        
+        // Update form action
+        form.action = `/admin/edit_flight/${flightData.id}`;
+        
+        // Populate form fields
+        document.getElementById('editFlightNum').value = flightData.flightNum;
+        document.getElementById('editAirline').value = flightData.airline;
+        document.getElementById('editOrigin').value = flightData.origin;
+        document.getElementById('editDestination').value = flightData.destination;
+        document.getElementById('editDate').value = flightData.date;
+        document.getElementById('editDepartureTime').value = flightData.departureTime;
+        document.getElementById('editArrivalTime').value = flightData.arrivalTime;
+        document.getElementById('editPrice').value = flightData.price;
+        document.getElementById('editAvailableSeats').value = flightData.availableSeats;
+    });
+
+    // Form Validation
+    document.querySelectorAll('.needs-validation').forEach(form => {
+        form.addEventListener('submit', function(event) {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        }, false);
+    });
+});
+</script>
+{% endblock %}

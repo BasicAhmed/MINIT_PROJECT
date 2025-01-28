@@ -1,0 +1,96 @@
+<!-- Modals -->
+<div class="modal fade" id="checkinModal" tabindex="-1" aria-labelledby="checkinModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-check-circle me-2"></i>Check-in
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('checkin', booking_num=booking.bookingNum) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p>Are you sure you want to check-in for this flight?</p>
+                    {% if not booking.seatNum %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>A seat will be automatically assigned during check-in
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-circle me-2"></i>Confirm Check-in
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="cancelModal" tabindex="-1" aria-labelledby="cancelModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-x-circle me-2"></i>Cancel Booking
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('cancel_booking', booking_num=booking.bookingNum) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p class="text-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        This action cannot be undone. Are you sure you want to cancel this booking?
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-2"></i>Confirm Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="rescheduleModal" tabindex="-1" aria-labelledby="rescheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">
+                    <i class="bi bi-calendar-event me-2"></i>Reschedule Booking
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('reschedule_booking', booking_num=booking.bookingNum) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select New Flight</label>
+                        <select class="form-select" name="newFlight" required>
+                            <option value="">Choose a flight...</option>
+                            {% for flight in available_flights %}
+                            <option value="{{ flight.id }}">
+                                {{ flight.flightNum }}: {{ flight.origin }} → {{ flight.destination }}
+                                ({{ flight.departureTime.strftime('%d %b %I:%M %p') }} - 
+                                {{ flight.arrivalTime.strftime('%d %b %I:%M %p') }})
+                                - RM{{ flight.price }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-repeat me-2"></i>Reschedule
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

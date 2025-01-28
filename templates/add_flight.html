@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Add Flight - Admin{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="card shadow-lg">
+        <div class="card-header bg-primary text-white">
+            <h3 class="mb-0">Add New Flight</h3>
+        </div>
+        
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('add_flight') }}">
+                <!-- CSRF Protection -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="row g-4">
+                    <!-- Flight Information -->
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Flight Number</label>
+                            <input type="text" class="form-control" name="flightNum" 
+                                   pattern="[A-Za-z]{2,3}\d{3,4}" 
+                                   title="Format: Airline code + numbers (e.g., MH123)" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Airline</label>
+                            <select class="form-select" name="airline" required>
+                                <option value="">Select Airline</option>
+                                <option value="Malaysia Airlines">Malaysia Airlines</option>
+                                <option value="AirAsia">AirAsia</option>
+                                <option value="Batik Air">Batik Air</option>
+                                <option value="Firefly">Firefly</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Airport Information -->
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Origin Airport</label>
+                            <input type="text" class="form-control" name="origin" 
+                                   list="airportList" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Destination Airport</label>
+                            <input type="text" class="form-control" name="destination" 
+                                   list="airportList" required>
+                        </div>
+                    </div>
+
+                    <!-- Date & Time -->
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label class="form-label">Flight Date</label>
+                            <input type="date" class="form-control" name="date" 
+                                   min="{{ datetime.now().strftime('%Y-%m-%d') }}" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label class="form-label">Departure Time</label>
+                            <input type="time" class="form-control" name="departureTime" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label class="form-label">Arrival Time</label>
+                            <input type="time" class="form-control" name="arrivalTime" required>
+                        </div>
+                    </div>
+
+                    <!-- Pricing & Capacity -->
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Price (RM)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">RM</span>
+                                <input type="number" class="form-control" name="price" 
+                                       min="50" step="10" value="300" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Available Seats</label>
+                            <input type="number" class="form-control" name="availableSeats" 
+                                   min="1" max="300" value="180" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2 mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        Add Flight
+                    </button>
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Airport Datalist -->
+<datalist id="airportList">
+    {% for airport in airports %}
+    <option value="{{ airport.code }} - {{ airport.name }}">
+    {% endfor %}
+</datalist>
+
+<!-- Time Validation Script -->
+<script>
+document.querySelector('form').addEventListener('submit', function(e) {
+    const depTime = document.querySelector('input[name="departureTime"]').value;
+    const arrTime = document.querySelector('input[name="arrivalTime"]').value;
+    
+    if (depTime >= arrTime) {
+        alert('Arrival time must be after departure time!');
+        e.preventDefault();
+    }
+});
+</script>
+{% endblock %}

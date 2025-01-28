@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Booking</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">Manage Your Booking</h1>
+        <form method="POST" action="/manage_booking">
+            <div class="form-group">
+                <label for="bookingNum">Booking Reference Number:</label>
+                <input type="text" id="bookingNum" name="bookingNum" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="surname">Surname:</label>
+                <input type="text" id="surname" name="surname" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Manage Booking</button>
+        </form>
+    </div>
+</body>
+</html>

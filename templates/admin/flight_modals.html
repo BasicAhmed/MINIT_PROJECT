@@ -1,0 +1,188 @@
+<!-- templates/admin/flight_modals.html -->
+
+<!-- Add Flight Modal -->
+<div class="modal fade" id="addFlightModal" tabindex="-1" aria-labelledby="addFlightModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <form action="{{ url_for('add_flight') }}" method="POST" class="needs-validation" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="addFlightModalLabel">
+                        <i class="bi bi-plus-circle me-2"></i>Create New Flight
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <!-- Flight Information -->
+                        <div class="col-md-6">
+                            <label for="flightNum" class="form-label">Flight Number</label>
+                            <input type="text" class="form-control" id="flightNum" name="flightNum" 
+                                   pattern="[A-Z]{2,3}\d{3,4}" required>
+                            <div class="invalid-feedback">
+                                Valid flight number required (e.g., MH123)
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="airline" class="form-label">Airline</label>
+                            <select class="form-select" id="airline" name="airline" required>
+                                <option value="">Select Airline</option>
+                                <option value="Malaysia Airlines">Malaysia Airlines</option>
+                                <option value="AirAsia">AirAsia</option>
+                                <option value="Batik Air">Batik Air</option>
+                                <option value="Firefly">Firefly</option>
+                            </select>
+                        </div>
+
+                        <!-- Airport Selection -->
+                        <div class="col-md-6">
+                            <label for="origin" class="form-label">Origin Airport</label>
+                            <input type="text" class="form-control" id="origin" name="origin"
+                                   list="airportList" required>
+                            <datalist id="airportList">
+                                {% for airport in airports %}
+                                <option value="{{ airport.code }} - {{ airport.name }}">
+                                {% endfor %}
+                            </datalist>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="destination" class="form-label">Destination Airport</label>
+                            <input type="text" class="form-control" id="destination" name="destination"
+                                   list="airportList" required>
+                        </div>
+
+                        <!-- Schedule -->
+                        <div class="col-md-4">
+                            <label for="date" class="form-label">Flight Date</label>
+                            <input type="date" class="form-control" id="date" name="date" 
+                                   min="{{ datetime.now().strftime('%Y-%m-%d') }}" required>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="departureTime" class="form-label">Departure Time</label>
+                            <input type="time" class="form-control" id="departureTime" name="departureTime" required>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="arrivalTime" class="form-label">Arrival Time</label>
+                            <input type="time" class="form-control" id="arrivalTime" name="arrivalTime" required>
+                        </div>
+
+                        <!-- Pricing & Capacity -->
+                        <div class="col-md-6">
+                            <label for="price" class="form-label">Price (RM)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">RM</span>
+                                <input type="number" class="form-control" id="price" name="price"
+                                       min="50" step="10" value="300" required>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="availableSeats" class="form-label">Available Seats</label>
+                            <input type="number" class="form-control" id="availableSeats" name="availableSeats"
+                                   min="1" max="300" value="180" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save me-2"></i>Create Flight
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Flight Modal -->
+<div class="modal fade" id="editFlightModal" tabindex="-1" aria-labelledby="editFlightModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <form method="POST" id="editFlightForm" class="needs-validation" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="editFlightModalLabel">
+                        <i class="bi bi-pencil-square me-2"></i>Edit Flight
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <!-- Flight Information -->
+                        <div class="col-md-6">
+                            <label for="editFlightNum" class="form-label">Flight Number</label>
+                            <input type="text" class="form-control" id="editFlightNum" name="flightNum" 
+                                   pattern="[A-Z]{2,3}\d{3,4}" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="editAirline" class="form-label">Airline</label>
+                            <select class="form-select" id="editAirline" name="airline" required>
+                                <option value="">Select Airline</option>
+                                <option value="Malaysia Airlines">Malaysia Airlines</option>
+                                <option value="AirAsia">AirAsia</option>
+                                <option value="Batik Air">Batik Air</option>
+                                <option value="Firefly">Firefly</option>
+                            </select>
+                        </div>
+
+                        <!-- Airport Selection -->
+                        <div class="col-md-6">
+                            <label for="editOrigin" class="form-label">Origin Airport</label>
+                            <input type="text" class="form-control" id="editOrigin" name="origin"
+                                   list="airportList" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="editDestination" class="form-label">Destination Airport</label>
+                            <input type="text" class="form-control" id="editDestination" name="destination"
+                                   list="airportList" required>
+                        </div>
+
+                        <!-- Schedule -->
+                        <div class="col-md-4">
+                            <label for="editDate" class="form-label">Flight Date</label>
+                            <input type="date" class="form-control" id="editDate" name="date" required>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="editDepartureTime" class="form-label">Departure Time</label>
+                            <input type="time" class="form-control" id="editDepartureTime" name="departureTime" required>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="editArrivalTime" class="form-label">Arrival Time</label>
+                            <input type="time" class="form-control" id="editArrivalTime" name="arrivalTime" required>
+                        </div>
+
+                        <!-- Pricing & Capacity -->
+                        <div class="col-md-6">
+                            <label for="editPrice" class="form-label">Price (RM)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">RM</span>
+                                <input type="number" class="form-control" id="editPrice" name="price"
+                                       min="50" step="10" required>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="editAvailableSeats" class="form-label">Available Seats</label>
+                            <input type="number" class="form-control" id="editAvailableSeats" name="availableSeats"
+                                   min="0" max="300" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save me-2"></i>Update Flight
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

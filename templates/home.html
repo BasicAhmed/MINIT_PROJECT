@@ -1,156 +1,129 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <!-- Meta Tags -->
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Find and book a great flight experience.">
-    <meta name="author" content="Flight Booking Website">
+{% extends "base.html" %}
+{% block title %}Flight Booking{% endblock %}
 
-    <!-- Title -->
-    <title>Flight Booking</title>
+{% block content %}
+<style>
+    /* Custom Styles */
+    .hero {
+        text-align: center;
+        padding: 4rem 0;
+        background: linear-gradient(rgba(255,255,255,0.9), rgba(255,255,255,0.9)),
+                    url("{{ url_for('static', filename='images/hero-image.jpg') }}");
+        background-size: cover;
+        background-position: center;
+        min-height: 80vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
 
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    .hero h1 {
+        font-size: 3.5rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        color: #222;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+    }
 
-    <!-- Inline CSS -->
-    <style>
-        /* General Reset */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    .hero p {
+        font-size: 1.25rem;
+        color: #555;
+        margin-bottom: 2.5rem;
+    }
 
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #ffffff;
-            color: #333;
-        }
+    .search-card {
+        background: rgba(255,255,255,0.95);
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        padding: 2.5rem;
+        margin-top: 2rem;
+    }
 
-        /* Header Section */
-        header {
-            background-color: #f8f9fa;
-            padding: 1rem 0;
-            border-bottom: 1px solid #ddd;
-        }
+    .btn-custom {
+        background-color: #4a64f1;
+        color: white;
+        padding: 1rem 2.5rem;
+        border-radius: 30px;
+        transition: all 0.3s ease;
+    }
 
-        .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 1rem;
-        }
+    .btn-custom:hover {
+        background-color: #3b51cc;
+        transform: translateY(-2px);
+    }
 
-        .navbar-brand {
-            font-weight: 600;
-            font-size: 1.5rem;
-            color: #000;
-            text-decoration: none;
-        }
+    .form-control-custom {
+        border-radius: 50px;
+        padding: 1rem 1.5rem;
+        border: 2px solid #e0e0e0;
+        transition: all 0.3s ease;
+    }
 
-        .nav-links {
-            list-style: none;
-            display: flex;
-            gap: 2rem;
-        }
+    .form-control-custom:focus {
+        border-color: #4a64f1;
+        box-shadow: 0 0 10px rgba(74,100,241,0.2);
+    }
+</style>
 
-        .nav-links a {
-            text-decoration: none;
-            color: #333;
-            font-weight: 500;
-            transition: color 0.3s ease;
-        }
-
-        .nav-links a:hover,
-        .nav-links a.active {
-            color: #007bff;
-        }
-
-        /* Hero Section */
-        .hero {
-            text-align: center;
-            margin: 3rem 0;
-            padding: 2rem 1rem;
-        }
-
-        .hero h1 {
-            font-size: 3rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: #222;
-        }
-
-        .hero p {
-            font-size: 1.2rem;
-            color: #555;
-            margin-bottom: 2rem;
-        }
-
-        .hero-image {
-            display: block;
-            margin: 0 auto;
-            max-width: 100%;
-            height: auto;
-            border-radius: 30px;
-        }
-
-        /* Button Styling */
-        .btn {
-            display: inline-block;
-            padding: 0.8rem 2rem;
-            background-color: #4a64f1;
-            color: #ffffff;
-            font-size: 1rem;
-            font-weight: 500;
-            border-radius: 50px;
-            text-decoration: none;
-            transition: background-color 0.3s ease;
-        }
-
-        .btn:hover {
-            background-color: #3b51cc;
-        }
-
-        /* Footer */
-        footer {
-            text-align: center;
-            padding: 1rem 0;
-            background-color: #f8f9fa;
-            color: #777;
-            font-size: 0.9rem;
-            border-top: 1px solid #ddd;
-        }
-    </style>
-</head>
-<body>
-    <!-- Header Section -->
-    <header>
-        <div class="navbar">
-            <a href="{{ url_for('home') }}" class="navbar-brand">Tim Line</a>
-
-            <!-- Navigation Links -->
-            <ul class="nav-links">
-                <li><a href="{{ url_for('home') }}" class="active">Home</a></li>
-                <li><a href="{{ url_for('register') }}">Register</a></li>
-                <li><a href="{{ url_for('login') }}">Login</a></li>
-            </ul>
-        </div>
-    </header>
-
-    <!-- Hero Section -->
-    <section class="hero">
+<!-- Hero Section -->
+<section class="hero">
+    <div class="container">
         <h1>Find And Book<br>A Great Experience</h1>
         <p>Explore flights, compare prices, and plan your next adventure!</p>
-        <img src="{{ url_for('static', filename='images/hero-image.jpg') }}" alt="Flight Booking" class="hero-image">
-        <a href="{{ url_for('register') }}" class="btn">Get Started</a>
-    </section>
+        
+        <div class="search-card">
+            <form action="{{ url_for('search_flights') }}" method="POST" class="row g-3">
+                <div class="col-md-3">
+                    <input type="text" class="form-control form-control-custom" 
+                           name="origin" placeholder="From" required
+                           data-autocomplete-airport>
+                </div>
+                <div class="col-md-3">
+                    <input type="text" class="form-control form-control-custom" 
+                           name="destination" placeholder="To" required
+                           data-autocomplete-airport>
+                </div>
+                <div class="col-md-3">
+                    <input type="date" class="form-control form-control-custom" 
+                           name="departure_date" required>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-custom w-100">
+                        Search Flights
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
 
-    <!-- Footer -->
-    <footer>
-        <p>&copy; 2025 Flight Booking Website. All rights reserved.</p>
-    </footer>
-</body>
-</html>
+<!-- Features Section -->
+<section class="container py-5">
+    <div class="row text-center">
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-0">
+                <div class="card-body">
+                    <h5 class="card-title">Best Prices</h5>
+                    <p class="card-text">Guaranteed lowest prices on all flights</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-0">
+                <div class="card-body">
+                    <h5 class="card-title">Easy Booking</h5>
+                    <p class="card-text">Simple and fast booking process</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-0">
+                <div class="card-body">
+                    <h5 class="card-title">24/7 Support</h5>
+                    <p class="card-text">Round-the-clock customer service</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

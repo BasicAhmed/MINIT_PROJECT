@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}Book Flight - {{ flight.flightNum }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="card shadow-lg">
+        <div class="card-header bg-primary text-white">
+            <h2 class="mb-0">Complete Your Booking</h2>
+        </div>
+
+        <div class="card-body">
+            <!-- Flight Details Section -->
+            <div class="flight-details mb-5">
+                <h3 class="mb-4">{{ flight.airline }} Flight {{ flight.flightNum }}</h3>
+                <div class="row">
+                    <div class="col-md-4">
+                        <p class="mb-1"><strong>Departure:</strong></p>
+                        <h4>{{ flight.departureTime.strftime('%H:%M') }}</h4>
+                        <p class="text-muted">{{ flight.origin }}</p>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <i class="bi bi-arrow-right fs-1 text-muted"></i>
+                        <p class="text-muted">{{ flight.date.strftime('%d %b %Y') }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <p class="mb-1"><strong>Arrival:</strong></p>
+                        <h4>{{ flight.arrivalTime.strftime('%H:%M') }}</h4>
+                        <p class="text-muted">{{ flight.destination }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Information (Read-only) -->
+            <div class="user-info mb-5">
+                <h4>Traveler Information</h4>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Name:</strong> {{ current_user.name }}</p>
+                        <p><strong>IC Number:</strong> {{ current_user.icNumber }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Email:</strong> {{ current_user.email }}</p>
+                        <p><strong>Phone:</strong> {{ current_user.phoneNumber }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seat Selection -->
+            <form method="POST" action="{{ url_for('book_flight', flight_id=flight.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <h4 class="mb-4">Choose Your Seat</h4>
+                <div class="seat-map">
+                    <div class="row mb-3">
+                        <div class="col text-center text-muted">
+                            <small>Front of Aircraft →</small>
+                        </div>
+                    </div>
+                    
+                    <div class="seat-grid" id="seat-grid">
+                        <!-- Dynamically populated seats -->
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col">
+                            <div class="seat-legend d-flex gap-3 justify-content-center">
+                                <div><span class="seat-available"></span> Available</div>
+                                <div><span class="seat-selected"></span> Selected</div>
+                                <div><span class="seat-booked"></span> Booked</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <input type="hidden" id="seat_number" name="seat_number" required>
+                </div>
+
+                <!-- Price Summary -->
+                <div class="price-summary mt-5 p-4 bg-light rounded">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>Total Price</h5>
+                            <p class="text-muted">Includes all taxes and fees</p>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <h3 class="text-primary">RM{{ flight.price }}</h3>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2 mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        Confirm Booking
+                    </button>
+                    <a href="{{ url_for('search_flights') }}" class="btn btn-outline-secondary">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .seat-grid {
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 0.5rem;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .seat {
+        padding: 0.8rem;
+        border: 2px solid #dee2e6;
+        text-align: center;
+        cursor: pointer;
+        border-radius: 5px;
+        transition: all 0.2s ease;
+        position: relative;
+    }
+
+    .seat:not(.booked):hover {
+        transform: translateY(-2px);
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    }
+
+    .seat.selected {
+        background: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+
+    .seat.booked {
+        background: #dee2e6;
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+
+    .seat-legend span {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border-radius: 3px;
+        margin-right: 0.5rem;
+    }
+
+    .seat-available { background: white; border: 2px solid #dee2e6; }
+    .seat-selected { background: #0d6efd; }
+    .seat-booked { background: #dee2e6; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const flightId = {{ flight.id }};
+    const seatGrid = document.getElementById('seat-grid');
+    const seatInput = document.getElementById('seat_number');
+    const errorMessage = document.getElementById('error-message');
+
+    // Load seats initially
+    fetchSeats();
+
+    async function fetchSeats() {
+        try {
+            const response = await fetch(`/get_available_seats?flight_id=${flightId}`);
+            const data = await response.json();
+            
+            seatGrid.innerHTML = '';
+            
+            // Create seat map with row labels
+            const rows = ['A', 'B', 'C', 'D', 'E', 'F'];
+            rows.forEach(row => {
+                const rowLabel = document.createElement('div');
+                rowLabel.className = 'row-label text-muted';
+                rowLabel.textContent = row;
+                seatGrid.appendChild(rowLabel);
+
+                for(let col = 1; col <= 10; col++) {
+                    const seat = `${row}${col}`;
+                    const seatElement = document.createElement('div');
+                    seatElement.className = `seat ${data.booked_seats.includes(seat) ? 'booked' : 'available'}`;
+                    seatElement.textContent = col;
+                    seatElement.dataset.seat = seat;
+
+                    if(!data.booked_seats.includes(seat)) {
+                        seatElement.addEventListener('click', handleSeatSelection);
+                    }
+
+                    seatGrid.appendChild(seatElement);
+                }
+            });
+
+        } catch (error) {
+            showError('Failed to load seat map. Please refresh the page.');
+        }
+    }
+
+    function handleSeatSelection(e) {
+        const selected = document.querySelector('.seat.selected');
+        if(selected) selected.classList.remove('selected');
+        e.target.classList.add('selected');
+        seatInput.value = e.target.dataset.seat;
+    }
+
+    function showError(message) {
+        errorMessage.textContent = message;
+        errorMessage.classList.add('active');
+        setTimeout(() => errorMessage.classList.remove('active'), 5000);
+    }
+
+    // Prevent double form submission
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const btn = this.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Processing...';
+    });
+});
+</script>
+{% endblock %}
