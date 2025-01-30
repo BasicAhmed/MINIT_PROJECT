@@ -2,8 +2,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user, login_user, logout_user, login_required
 from flask_wtf import CSRFProtect
-from flask import (render_template, redirect, url_for, request, 
-                  flash, jsonify, make_response, send_file)
+from flask import render_template, redirect, url_for, request, flash, jsonify, make_response, send_file, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
@@ -125,7 +124,7 @@ def logout():
 # --------------------------
 @app.route('/')
 def home():
-    return render_template('base.html')
+    return render_template('home.html')
 
 @app.route('/dashboard')
 @login_required
