@@ -1,7 +1,7 @@
 <!-- Profile Settings Modal -->
 <div class="modal fade" id="profileModal">
-    <div class="modal-dialog">
-        <form method="POST" action="{{ url_for('profile_settings') }}">
+    <div class="modal-dialog modal-lg">
+        <form method="POST" action="{{ url_for('profile_settings') }}" class="needs-validation" novalidate>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
@@ -9,15 +9,75 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" class="form-control" name="name" 
-                               value="{{ current_user.name }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Email Address</label>
-                        <input type="email" class="form-control" name="email"
-                               value="{{ current_user.email }}" required>
+                    <div class="row g-3">
+                        <!-- Personal Information -->
+                        <div class="col-md-6">
+                            <h5 class="mb-3"><i class="bi bi-person-badge"></i> Personal Details</h5>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Full Name</label>
+                                <input type="text" class="form-control" name="name" 
+                                       value="{{ current_user.name }}" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">IC Number</label>
+                                <input type="text" class="form-control" name="icNumber"
+                                       pattern="\d{12}" 
+                                       value="{{ current_user.icNumber }}" required>
+                                <div class="invalid-feedback">
+                                    12-digit IC number required
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Phone Number</label>
+                                <input type="tel" class="form-control" name="phoneNumber"
+                                       pattern="\+?\d{10,15}" 
+                                       value="{{ current_user.phoneNumber }}" required>
+                                <div class="invalid-feedback">
+                                    Valid phone number required (e.g. +60123456789)
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Account Security -->
+                        <div class="col-md-6">
+                            <h5 class="mb-3"><i class="bi bi-shield-lock"></i> Account Security</h5>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Username</label>
+                                <input type="text" class="form-control" name="username"
+                                       pattern="[a-zA-Z0-9_]{3,20}" 
+                                       value="{{ current_user.username }}" required>
+                                <div class="invalid-feedback">
+                                    3-20 characters (letters, numbers, underscores)
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Email Address</label>
+                                <input type="email" class="form-control" name="email"
+                                       value="{{ current_user.email }}" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Current Password</label>
+                                <input type="password" class="form-control" name="current_password"
+                                       placeholder="Enter current password to make changes">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">New Password</label>
+                                <input type="password" class="form-control" name="new_password"
+                                       placeholder="Leave blank to keep current">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Confirm New Password</label>
+                                <input type="password" class="form-control" name="confirm_password">
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -29,33 +89,42 @@
     </div>
 </div>
 
-<!-- Booking Management Modals -->
-{% for booking in bookings %}
-<div class="modal fade" id="manageBookingModal{{ booking.id }}">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-info text-white">
-                <h5 class="modal-title">Manage Booking #{{ booking.bookingNum }}</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="d-grid gap-2">
-                    {% if booking.bookingStatus == 'Booked' %}
-                    <a href="{{ url_for('checkin', booking_num=booking.bookingNum) }}" 
-                       class="btn btn-success">
-                        <i class="bi bi-check-circle"></i> Check-in Now
-                    </a>
-                    {% endif %}
-                    
-                    <form method="POST" action="{{ url_for('cancel_booking', booking_num=booking.bookingNum) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-danger w-100">
-                            <i class="bi bi-x-circle"></i> Cancel Booking
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-{% endfor %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Real-time IC number validation
+        document.querySelector('input[name="icNumber"]').addEventListener('input', function(e) {
+            this.value = this.value.replace(/\D/g, '').slice(0, 12);
+        });
+    
+        // Phone number formatting
+        document.querySelector('input[name="phoneNumber"]').addEventListener('input', function(e) {
+            this.value = this.value.replace(/[^\d+]/g, '');
+        });
+    
+        // Username validation
+        document.querySelector('input[name="username"]').addEventListener('input', function(e) {
+            this.value = this.value.replace(/[^a-zA-Z0-9_]/g, '');
+        });
+    
+        // Form validation
+        document.querySelector('#profileModal form').addEventListener('submit', function(e) {
+            let isValid = true;
+            
+            // Check password match
+            const newPass = document.querySelector('input[name="new_password"]').value;
+            const confirmPass = document.querySelector('input[name="confirm_password"]').value;
+            if (newPass && newPass !== confirmPass) {
+                alert('New passwords must match!');
+                isValid = false;
+            }
+    
+            if (!this.checkValidity()) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+    
+            this.classList.add('was-validated');
+            return isValid;
+        });
+    });
+    </script>

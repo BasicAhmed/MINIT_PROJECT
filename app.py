@@ -166,27 +166,65 @@ def user_dashboard():
 def profile_settings():
     if request.method == 'POST':
         try:
-            # Check for existing email
-            new_email = request.form.get('email')
-            if Users.query.filter(Users.email == new_email, Users.id != current_user.id).first():
-                flash('Email already in use!', 'error')
-                return redirect(url_for('user_dashboard'))
+            current_password = request.form.get('current_password')
+            new_password = request.form.get('new_password')
+            confirm_password = request.form.get('confirm_password')
 
-            # Update user details
-            current_user.name = request.form.get('name', current_user.name)
-            current_user.email = request.form.get('email', current_user.email)
-            
-            if request.form.get('password'):
-                current_user.set_password(request.form.get('password'))
-            
+            # Verify current password if changing sensitive fields
+            if any([
+                request.form.get('email') != current_user.email,
+                request.form.get('username') != current_user.username,
+                new_password
+            ]):
+                if not current_password or not current_user.check_password(current_password):
+                    flash('Current password is required for these changes', 'error')
+                    return redirect(url_for('user_dashboard'))
+
+            # Check unique constraints
+            fields_to_check = {
+                'email': request.form['email'],
+                'username': request.form['username'],
+                'icNumber': request.form['icNumber'],
+                'phoneNumber': request.form['phoneNumber']
+            }
+
+            for field, value in fields_to_check.items():
+                existing = Users.query.filter(
+                    getattr(Users, field) == value,
+                    Users.id != current_user.id
+                ).first()
+                if existing:
+                    flash(f'{field.capitalize()} already exists!', 'error')
+                    return redirect(url_for('user_dashboard'))
+
+            # Update profile fields
+            current_user.name = request.form['name']
+            current_user.icNumber = request.form['icNumber']
+            current_user.phoneNumber = request.form['phoneNumber']
+            current_user.username = request.form['username']
+            current_user.email = request.form['email']
+
+            # Handle password change
+            if new_password:
+                if new_password != confirm_password:
+                    flash('New passwords do not match!', 'error')
+                    return redirect(url_for('user_dashboard'))
+                current_user.set_password(new_password)
+
             db.session.commit()
             flash('Profile updated successfully!', 'success')
-            
+
         except Exception as e:
             db.session.rollback()
             flash(f'Update failed: {str(e)}', 'error')
-    
+
     return redirect(url_for('user_dashboard'))
+
+from flask import request, render_template, jsonify
+from flask_login import login_required
+from datetime import datetime
+
+from datetime import datetime, time
 
 @app.route('/search_flights', methods=['GET', 'POST'])
 @login_required
@@ -215,7 +253,7 @@ def search_flights():
         except Exception as e:
             flash(f'Search error: {str(e)}', 'error')
 
-    return render_template('search_flights.html')
+    return render_template('search_flights.html', datetime=datetime)
 
 @app.route('/book_flight/<int:flight_id>', methods=['GET', 'POST'])
 @login_required
@@ -372,19 +410,18 @@ def cancel_booking(booking_num):
         return jsonify(success=False)
 
 @app.route('/download_ticket/<booking_ref>')
-@login_required
 def download_ticket(booking_ref):
-    booking = Bookings.query.filter_by(
-        bookingNum=booking_ref,
-        user_id=current_user.id
-    ).first_or_404()
-
-    buffer = io.BytesIO()
-    p = canvas.Canvas(buffer, pagesize=letter)
-    # Add ticket content
-    p.showPage()
-    p.save()
+    booking = Bookings.query.filter_by(bookingNum=booking_ref).first_or_404()
     
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer)
+    
+    # Add ticket content
+    p.drawString(100, 700, f"Ticket for {booking.user.name}")
+    p.drawString(100, 680, f"Flight: {booking.flight.flightNum}")
+    p.drawString(100, 660, f"Seat: {booking.seatNum}")
+    
+    p.save()
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name=f"ticket_{booking_ref}.pdf")
 
@@ -521,11 +558,24 @@ def view_passengers(flight_id):
 # --------------------------
 @app.route('/get_airports', methods=['GET'])
 def get_airports():
-    query = request.args.get('query', '')
-    origins = db.session.query(Flights.origin).filter(Flights.origin.ilike(f'%{query}%')).distinct().all()
-    destinations = db.session.query(Flights.destination).filter(Flights.destination.ilike(f'%{query}%')).distinct().all()
-    suggestions = [origin[0] for origin in origins] + [destination[0] for destination in destinations]
-    return jsonify(suggestions)
+    query = request.args.get('query', '').strip().upper()
+    
+    if len(query) < 2:
+        return jsonify([])
+
+    # Get unique airports from existing flights
+    origins = db.session.query(Flights.origin).filter(
+        Flights.origin.ilike(f'%{query}%')
+    ).distinct().all()
+
+    destinations = db.session.query(Flights.destination).filter(
+        Flights.destination.ilike(f'%{query}%')
+    ).distinct().all()
+
+    suggestions = [{'code': o[0], 'name': ''} for o in origins] + \
+                 [{'code': d[0], 'name': ''} for d in destinations]
+
+    return jsonify(suggestions[:10])  # Limit to 10 suggestions
 
 @app.route('/get_available_seats', methods=['GET'])
 @login_required
