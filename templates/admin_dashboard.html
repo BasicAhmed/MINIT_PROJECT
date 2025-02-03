@@ -1,10 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Admin Dashboard{% endblock %}
-{% include 'admin/flight_modals.html' %}
-
 
 {% block content %}
 <div class="container-fluid py-4">
+    <!-- Flash Messages -->
+    <div class="flash-messages">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
     <!-- Dashboard Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="bi bi-speedometer2"></i> Flight Management</h2>
@@ -63,20 +75,20 @@
                             <!-- Capacity -->
                             <td>
                                 <div class="progress" style="height: 20px;">
-                                    {% set occupancy = ((flight.availableSeats / 180) * 100)|round %}
-                                    <div class="progress-bar bg-{{ 'success' if occupancy > 30 else 'warning' }}" 
+                                    {% set total_seats = 180 %}
+                                    {% set booked_seats = total_seats - flight.availableSeats %}
+                                    {% set occupancy = ((booked_seats / total_seats) * 100)|round %}
+                                    <div class="progress-bar bg-{{ 'success' if occupancy <= 80 else 'danger' }}" 
                                          role="progressbar" 
                                          style="width: {{ occupancy }}%">
-                                        {{ flight.availableSeats }} seats
+                                        {{ flight.availableSeats }} seats left
                                     </div>
                                 </div>
                             </td>
 
                             <!-- Status -->
                             <td>
-                                {% if flight.date < current_date %}
-                                <span class="badge bg-secondary">Completed</span>
-                                {% elif flight.date == current_date %}
+                                {% if flight.date == current_date.date() %}
                                 <span class="badge bg-warning">Today</span>
                                 {% else %}
                                 <span class="badge bg-success">Upcoming</span>
@@ -86,22 +98,32 @@
                             <!-- Actions -->
                             <td>
                                 <div class="d-flex gap-2">
-                                    <button class="btn btn-sm btn-outline-primary"
+                                    <button class="btn btn-sm btn-outline-primary edit-flight-btn"
                                             data-bs-toggle="modal" 
                                             data-bs-target="#editFlightModal"
                                             data-flight-id="{{ flight.id }}"
-                                            data-flight-data="{{ flight|tojson|forceescape }}">
+                                            data-flight-data="{{ flight.to_dict()|tojson|forceescape }}">
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     
-                                    <form action="{{ url_for('delete_flight', flight_id=flight.id) }}" 
-                                          method="POST" 
-                                          onsubmit="return confirm('Delete this flight permanently?')">
+                                    <form class="delete-flight-form" 
+                                          action="{{ url_for('delete_flight', flight_id=flight.id) }}" 
+                                          method="POST">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-sm btn-outline-danger">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </form>
+                                    <td>
+                                    <div class="d-flex gap-2">
+                                            <!-- Existing buttons... -->
+                                            <a href="{{ url_for('view_passengers', flight_id=flight.id) }}" 
+                                               class="btn btn-sm btn-outline-info"
+                                               title="View Passengers">
+                                                <i class="bi bi-people"></i>
+                                            </a>
+                                        </div>
+                                    </td>
                                 </div>
                             </td>
                         </tr>
@@ -113,7 +135,6 @@
     </div>
 </div>
 
-<!-- Modals -->
 {% include 'admin/flight_modals.html' %}
 
 {% endblock %}
@@ -125,9 +146,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const editModal = document.getElementById('editFlightModal');
     editModal.addEventListener('show.bs.modal', function(event) {
         const button = event.relatedTarget;
-        const flightData = JSON.parse(button.dataset.flightData);
+        const rawData = button.dataset.flightData.replace(/&quot;/g, '"');
+        const flightData = JSON.parse(rawData);
         const form = document.getElementById('editFlightForm');
         
+        // Format dates/times for HTML inputs
+        const flightDate = new Date(flightData.date).toISOString().split('T')[0];
+        const departureTime = flightData.departureTime.slice(0,5);
+        const arrivalTime = flightData.arrivalTime.slice(0,5);
+
         // Update form action
         form.action = `/admin/edit_flight/${flightData.id}`;
         
@@ -136,23 +163,55 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('editAirline').value = flightData.airline;
         document.getElementById('editOrigin').value = flightData.origin;
         document.getElementById('editDestination').value = flightData.destination;
-        document.getElementById('editDate').value = flightData.date;
-        document.getElementById('editDepartureTime').value = flightData.departureTime;
-        document.getElementById('editArrivalTime').value = flightData.arrivalTime;
+        document.getElementById('editDate').value = flightDate;
+        document.getElementById('editDepartureTime').value = departureTime;
+        document.getElementById('editArrivalTime').value = arrivalTime;
         document.getElementById('editPrice').value = flightData.price;
         document.getElementById('editAvailableSeats').value = flightData.availableSeats;
     });
 
-    // Form Validation
-    document.querySelectorAll('.needs-validation').forEach(form => {
-        form.addEventListener('submit', function(event) {
-            if (!form.checkValidity()) {
-                event.preventDefault();
-                event.stopPropagation();
+    // Delete Flight Handler
+    document.querySelectorAll('.delete-flight-form').forEach(form => {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!confirm('Permanently delete this flight and all associated bookings?')) return;
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': form.querySelector('[name="csrf_token"]').value
+                    },
+                    body: new URLSearchParams(new FormData(form))
+                });
+
+                if (response.ok) {
+                    form.closest('tr').remove();
+                    showToast('Flight deleted successfully!', 'success');
+                } else {
+                    showToast('Deletion failed!', 'error');
+                }
+            } catch (error) {
+                showToast('Network error! Please try again.', 'error');
             }
-            form.classList.add('was-validated');
-        }, false);
+        });
     });
+
+    // Toast Notification System
+    function showToast(message, type) {
+        const toastContainer = document.createElement('div');
+        toastContainer.innerHTML = `
+            <div class="toast align-items-center text-white bg-${type} border-0" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">${message}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(toastContainer);
+        new bootstrap.Toast(toastContainer.querySelector('.toast')).show();
+    }
 });
 </script>
 {% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}My Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Dashboard Header with Modals Trigger -->
+    <div class="d-flex justify-content-between mb-4">
+        <h2><i class="bi bi-person-circle"></i> Welcome, {{ current_user.name }}</h2>
+        <div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#profileModal">
+                <i class="bi bi-gear"></i> Profile Settings
+            </button>
+            <a href="{{ url_for('search_flights') }}" class="btn btn-success">
+                <i class="bi bi-search"></i> Book New Flight
+            </a>
+        </div>
+    </div>
+
+    <!-- Active Bookings Section -->
+    <div class="card shadow">
+        <div class="card-header">
+            <h4 class="mb-0"><i class="bi bi-ticket-perforated"></i> My Bookings</h4>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                {% for booking in bookings %}
+                <div class="col-md-6">
+                    <div class="booking-card">
+                        <div class="booking-header">
+                            <span class="badge bg-{{ 'success' if booking.bookingStatus == 'Checked-in' else 'primary' }}">
+                                {{ booking.bookingStatus }}
+                            </span>
+                            <small class="text-muted">#{{ booking.bookingNum }}</small>
+                        </div>
+                        
+                        <div class="booking-body">
+                            <div class="airline">{{ booking.flight.airline }}</div>
+                            <div class="route">
+                                {{ booking.flight.origin }} → {{ booking.flight.destination }}
+                            </div>
+                            <div class="details">
+                                {{ booking.flight.date.strftime('%d %b') }} 
+                                {{ booking.flight.departureTime.strftime('%H:%M') }}
+                            </div>
+                        </div>
+
+                        <div class="booking-actions">
+                            <button class="btn btn-sm btn-outline-primary"
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#manageBookingModal{{ booking.id }}">
+                                <i class="bi bi-pencil"></i> Manage
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include Modals -->
+{% include 'user_modals.html' %}
+
+{% endblock %}

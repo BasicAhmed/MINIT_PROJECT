@@ -1,8 +1,9 @@
-from flask import Flask
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, make_response, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user, login_user, logout_user, login_required
 from flask_wtf import CSRFProtect
-from flask import render_template, redirect, url_for, request, flash, jsonify, make_response, send_file, abort
+from flask import (render_template, redirect, url_for, request, 
+                  flash, jsonify, make_response, send_file)
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
@@ -12,13 +13,18 @@ import json
 import io
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-from models import Users, Flights, Bookings
+from flask import abort
+from functools import wraps
 
+
+# Import the db object from your extensions module (or adjust if importing from __init__)
+from extensions import db
+
+from models import Users, Flights, Bookings
 
 # --------------------------
 # INITIALIZING EXTENSIONS
 # --------------------------
-db = SQLAlchemy()
 login_manager = LoginManager()
 csrf = CSRFProtect()
 
@@ -62,45 +68,60 @@ def generate_booking_ref():
         if not Bookings.query.filter_by(bookingNum=ref).first():
             return ref
 
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return login_manager.unauthorized()
+        if not current_user.is_admin:
+            abort(403)  # Forbidden
+        return f(*args, **kwargs)
+    return decorated
+
 # --------------------------
 # AUTHENTICATION ROUTES
 # --------------------------
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
+        # Validate required fields
+        required_fields = ['icNumber', 'name', 'phoneNumber', 'email', 'username', 'password']
+        if not all(field in request.form for field in required_fields):
+            flash('All fields are required!', 'error')
+            return redirect(url_for('register'))
+
+        # Check for existing user
+        existing_user = Users.query.filter(
+            (Users.email == request.form['email']) | 
+            (Users.username == request.form['username']) | 
+            (Users.icNumber == request.form['icNumber'])
+        ).first()
+
+        if existing_user:
+            flash('User already exists with these details!', 'error')
+            return redirect(url_for('register'))
+
+        # Create user
         try:
-            # Check existing user
-            existing_user = Users.query.filter(
-                (Users.email == request.form['email']) | 
-                (Users.username == request.form['username']) |
-                (Users.icNumber == request.form['icNumber'])
-            ).first()
-
-            if existing_user:
-                flash('User with these details already exists!', 'error')
-                return redirect(url_for('register'))
-
-            # Create new user with account type
             new_user = Users(
                 icNumber=request.form['icNumber'],
                 name=request.form['name'],
                 phoneNumber=request.form['phoneNumber'],
                 email=request.form['email'],
                 username=request.form['username'],
-                is_admin=True if request.form.get('account_type') == 'admin' else False
+                is_admin=False  # Explicitly set default
             )
             new_user.set_password(request.form['password'])
-            
             db.session.add(new_user)
             db.session.commit()
-            
-            flash('Registration successful! Please login', 'success')
+            flash('Registration successful! Please login.', 'success')
             return redirect(url_for('login'))
-
         except Exception as e:
             db.session.rollback()
             flash(f'Registration failed: {str(e)}', 'error')
+
     return render_template('register.html')
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -119,6 +140,16 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    if current_user.is_admin:
+        return redirect(url_for('admin_dashboard'))
+    return redirect(url_for('user_dashboard'))
+
+
+
 # --------------------------
 # CUSTOMER ROUTES
 # --------------------------
@@ -126,11 +157,76 @@ def logout():
 def home():
     return render_template('home.html')
 
-@app.route('/dashboard')
+@app.route('/user_dashboard')
 @login_required
-def dashboard():
-    bookings = Bookings.query.filter_by(user_id=current_user.id).order_by(Bookings.createdAt.desc()).all()
-    return render_template('dashboard.html', bookings=bookings)
+def user_dashboard():
+    bookings = Bookings.query.filter_by(user_id=current_user.id).all()
+    return render_template('user_dashboard.html', bookings=bookings)
+
+@app.route('/profile_settings', methods=['POST'])
+@login_required
+def profile_settings():
+    if request.method == 'POST':
+        try:
+            current_password = request.form.get('current_password')
+            new_password = request.form.get('new_password')
+            confirm_password = request.form.get('confirm_password')
+
+            # Verify current password if changing sensitive fields
+            if any([
+                request.form.get('email') != current_user.email,
+                request.form.get('username') != current_user.username,
+                new_password
+            ]):
+                if not current_password or not current_user.check_password(current_password):
+                    flash('Current password is required for these changes', 'error')
+                    return redirect(url_for('user_dashboard'))
+
+            # Check unique constraints
+            fields_to_check = {
+                'email': request.form['email'],
+                'username': request.form['username'],
+                'icNumber': request.form['icNumber'],
+                'phoneNumber': request.form['phoneNumber']
+            }
+
+            for field, value in fields_to_check.items():
+                existing = Users.query.filter(
+                    getattr(Users, field) == value,
+                    Users.id != current_user.id
+                ).first()
+                if existing:
+                    flash(f'{field.capitalize()} already exists!', 'error')
+                    return redirect(url_for('user_dashboard'))
+
+            # Update profile fields
+            current_user.name = request.form['name']
+            current_user.icNumber = request.form['icNumber']
+            current_user.phoneNumber = request.form['phoneNumber']
+            current_user.username = request.form['username']
+            current_user.email = request.form['email']
+
+            # Handle password change
+            if new_password:
+                if new_password != confirm_password:
+                    flash('New passwords do not match!', 'error')
+                    return redirect(url_for('user_dashboard'))
+                current_user.set_password(new_password)
+
+            db.session.commit()
+            flash('Profile updated successfully!', 'success')
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Update failed: {str(e)}', 'error')
+
+    return redirect(url_for('user_dashboard'))
+
+from flask import request, render_template, jsonify
+from flask_login import login_required
+from datetime import datetime
+
+from datetime import datetime, time
 
 @app.route('/search_flights', methods=['GET', 'POST'])
 @login_required
@@ -159,7 +255,7 @@ def search_flights():
         except Exception as e:
             flash(f'Search error: {str(e)}', 'error')
 
-    return render_template('search_flights.html')
+    return render_template('search_flights.html', datetime=datetime)
 
 @app.route('/book_flight/<int:flight_id>', methods=['GET', 'POST'])
 @login_required
@@ -248,27 +344,21 @@ def assign_seat(flight):
 @app.route('/checkin/<string:booking_num>', methods=['POST'])
 @login_required
 def checkin(booking_num):
-    """Handle check-in with automatic seat assignment"""
     booking = Bookings.query.filter_by(
         bookingNum=booking_num,
         user_id=current_user.id
     ).first_or_404()
 
     if booking.bookingStatus == "Checked-in":
-        flash("Already checked in", "info")
-        return redirect(url_for('manage_booking'))
+        flash("Already checked-in", "error")
+        return jsonify(success=False)
 
-    # Automatic seat assignment
     if not booking.seatNum:
-        flight = Flights.query.get(booking.flight_id)
-        if not flight:
-            flash("Flight not found", "error")
-            return redirect(url_for('manage_booking'))
-
+        flight = booking.flight
         assigned_seat = assign_seat(flight)
         if not assigned_seat:
             flash("No available seats maintaining balance", "error")
-            return redirect(url_for('manage_booking'))
+            return jsonify(success=False)
             
         booking.seatNum = assigned_seat
         flash(f"Assigned seat {assigned_seat}", "success")
@@ -276,7 +366,7 @@ def checkin(booking_num):
     booking.bookingStatus = "Checked-in"
     db.session.commit()
     flash("Check-in successful!", "success")
-    return redirect(url_for('manage_booking'))
+    return jsonify(success=True)
 
 @app.route('/booking_confirmation/<booking_ref>')
 @login_required
@@ -312,63 +402,182 @@ def cancel_booking(booking_num):
     ).first_or_404()
 
     try:
-        flight = Flights.query.get(booking.flight_id)
-        flight.availableSeats += 1
-        booking.bookingStatus = 'Cancelled'
+        db.session.delete(booking)
         db.session.commit()
-        flash('Booking cancelled successfully', 'success')
+        flash('Booking cancelled successfully!', 'success')
+        return jsonify(success=True)
     except Exception as e:
         db.session.rollback()
-        flash(f'Cancellation failed: {str(e)}', 'error')
-
-    return redirect(url_for('manage_booking'))
+        flash(f'Error cancelling booking: {str(e)}', 'error')
+        return jsonify(success=False)
 
 @app.route('/download_ticket/<booking_ref>')
-@login_required
 def download_ticket(booking_ref):
-    booking = Bookings.query.filter_by(
-        bookingNum=booking_ref,
-        user_id=current_user.id
-    ).first_or_404()
-
-    # PDF generation logic here
-    buffer = io.BytesIO()
-    p = canvas.Canvas(buffer, pagesize=letter)
-    # Add ticket content
-    p.showPage()
-    p.save()
+    booking = Bookings.query.filter_by(bookingNum=booking_ref).first_or_404()
     
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer)
+    
+    # Add ticket content
+    p.drawString(100, 700, f"Ticket for {booking.user.name}")
+    p.drawString(100, 680, f"Flight: {booking.flight.flightNum}")
+    p.drawString(100, 660, f"Seat: {booking.seatNum}")
+    
+    p.save()
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name=f"ticket_{booking_ref}.pdf")
 
 # --------------------------
 # ADMIN ROUTES
 # --------------------------
-@app.route('/admin/dashboard')
-@login_required
+
+@app.route('/admin_dashboard')
+@admin_required
 def admin_dashboard():
     if not current_user.is_admin:
-        abort(403)
+        flash('Unauthorized access!', 'error')
+        return redirect(url_for('user_dashboard'))
+    users = Users.query.all()
     flights = Flights.query.all()
-    return render_template('admin/dashboard.html', flights=flights)
-
+    current_date = datetime.now()
+    return render_template('admin_dashboard.html', flights=flights, current_date=current_date, datetime=datetime)
+    
 @app.route('/admin/add_flight', methods=['POST'])
-@login_required
+@admin_required
 def add_flight():
     if not current_user.is_admin:
         abort(403)
-    # ... (keep existing admin routes unchanged) ...
+    
+    try:
+        flight_num = request.form['flightNum'].strip().upper()
+        
+        # Check for existing flight number
+        if Flights.query.filter_by(flightNum=flight_num).first():
+            flash(f'Flight {flight_num} already exists!', 'error')
+            return redirect(url_for('admin_dashboard'))
+
+        # Convert times properly
+        departure_time = datetime.strptime(request.form['departureTime'], '%H:%M').time()
+        arrival_time = datetime.strptime(request.form['arrivalTime'], '%H:%M').time()
+        
+        new_flight = Flights(
+            flightNum=flight_num,
+            airline=request.form['airline'],
+            origin=request.form['origin'].strip().upper(),
+            destination=request.form['destination'].strip().upper(),
+            date=datetime.strptime(request.form['date'], '%Y-%m-%d').date(),
+            departureTime=departure_time,
+            arrivalTime=arrival_time,
+            price=float(request.form['price']),
+            availableSeats=int(request.form['availableSeats'])
+        )
+
+        db.session.add(new_flight)
+        db.session.commit()
+        flash(f'Flight {flight_num} added successfully!', 'success')
+        
+    except ValueError as e:
+        db.session.rollback()
+        flash(f'Invalid input format: {str(e)}', 'error')
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        flash(f'Database error: {str(e)}', 'error')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Unexpected error: {str(e)}', 'error')
+
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/edit_flight/<int:flight_id>', methods=['POST'])
+@admin_required
+def edit_flight(flight_id):
+    if not current_user.is_admin:
+        abort(403)
+    
+    try:
+        flight = Flights.query.get_or_404(flight_id)
+
+        # Update flight details
+        flight.flightNum = request.form['flightNum']
+        flight.airline = request.form['airline']
+        flight.origin = request.form['origin']
+        flight.destination = request.form['destination']
+        flight.date = datetime.strptime(request.form['date'], '%Y-%m-%d').date()
+        flight.departureTime = datetime.strptime(request.form['departureTime'], '%H:%M').time()
+        flight.arrivalTime = datetime.strptime(request.form['arrivalTime'], '%H:%M').time()
+        flight.price = float(request.form['price'])
+        flight.availableSeats = int(request.form['availableSeats'])
+
+        # Commit changes
+        db.session.commit()
+        flash('Flight updated successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating flight: {str(e)}', 'error')
+
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/delete_flight/<int:flight_id>', methods=['POST'])
+@admin_required
+def delete_flight(flight_id):
+    if not current_user.is_admin:
+        abort(403)
+    
+    try:
+        flight = Flights.query.get_or_404(flight_id)
+        db.session.delete(flight)
+        db.session.commit()
+        flash('Flight deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting flight: {str(e)}', 'error')
+
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/view_passengers/<int:flight_id>')
+@admin_required
+def view_passengers(flight_id):
+    flight = Flights.query.get_or_404(flight_id)
+    
+    # Get passengers with booking details
+    passengers = db.session.query(
+        Users.name,
+        Users.icNumber,
+        Users.email,
+        Bookings.bookingNum,
+        Bookings.seatNum,
+        Bookings.bookingStatus
+    ).join(Bookings).filter(
+        Bookings.flight_id == flight_id
+    ).all()
+
+    return render_template('view_passengers.html', 
+                         flight=flight,
+                         passengers=passengers)
 
 # --------------------------
 # API ENDPOINTS
 # --------------------------
 @app.route('/get_airports', methods=['GET'])
 def get_airports():
-    query = request.args.get('query', '')
-    origins = db.session.query(Flights.origin).filter(Flights.origin.ilike(f'%{query}%')).distinct().all()
-    destinations = db.session.query(Flights.destination).filter(Flights.destination.ilike(f'%{query}%')).distinct().all()
-    suggestions = [origin[0] for origin in origins] + [destination[0] for destination in destinations]
-    return jsonify(suggestions)
+    query = request.args.get('query', '').strip().upper()
+    
+    if len(query) < 2:
+        return jsonify([])
+
+    # Get unique airports from existing flights
+    origins = db.session.query(Flights.origin).filter(
+        Flights.origin.ilike(f'%{query}%')
+    ).distinct().all()
+
+    destinations = db.session.query(Flights.destination).filter(
+        Flights.destination.ilike(f'%{query}%')
+    ).distinct().all()
+
+    suggestions = [{'code': o[0], 'name': ''} for o in origins] + \
+                 [{'code': d[0], 'name': ''} for d in destinations]
+
+    return jsonify(suggestions[:10])  # Limit to 10 suggestions
 
 @app.route('/get_available_seats', methods=['GET'])
 @login_required
@@ -378,6 +587,10 @@ def get_available_seats():
     booked_seats = [b.seatNum for b in flight.bookings if b.seatNum]
     all_seats = [f"{row}{col}" for row in 'ABCDEF' for col in range(1, 11)]
     return jsonify({'available_seats': [s for s in all_seats if s not in booked_seats]})
+
+@app.errorhandler(403)
+def forbidden(error):
+    return render_template('403.html'), 403
 
 if __name__ == '__main__':
     app.run(debug=True)
