@@ -75,13 +75,13 @@
                             <!-- Capacity -->
                             <td>
                                 <div class="progress" style="height: 20px;">
-                                    {% set total_seats = 180 %}
-                                    {% set booked_seats = total_seats - flight.availableSeats %}
+                                    {% set total_seats = 180|int %}
+                                    {% set booked_seats = total_seats - flight.availableSeats|int %}
                                     {% set occupancy = ((booked_seats / total_seats) * 100)|round %}
-                                    <div class="progress-bar bg-{{ 'success' if occupancy <= 80 else 'danger' }}" 
-                                         role="progressbar" 
-                                         style="width: {{ occupancy }}%">
-                                        {{ flight.availableSeats }} seats left
+                                    <div id="seat-capacity-cont" class="progress-bar bg-{{ 'success' if occupancy <= 80 else 'danger' }}"
+                                        data-occupancy = "{{ occupancy }}"
+                                        role="progressbar">
+                                        <p>{{ flight.availableSeats }} seats left</p>
                                     </div>
                                 </div>
                             </td>
@@ -142,6 +142,11 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const capacityContainers = document.querySelectorAll('#seat-capacity-cont');
+    capacityContainers.forEach((cont) => {
+            let occupancy = cont.getAttribute('data-occupancy');
+            cont.style.width = `${occupancy}%`;
+        });
     // Edit Modal Handler
     const editModal = document.getElementById('editFlightModal');
     editModal.addEventListener('show.bs.modal', function(event) {
