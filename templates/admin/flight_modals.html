@@ -39,18 +39,19 @@
                         <div class="col-md-6">
                             <label for="origin" class="form-label">Origin Airport</label>
                             <input type="text" class="form-control" id="origin" name="origin"
-                                   list="airportList" required>
-                            <datalist id="airportList">
-                                {% for airport in airports %}
-                                <option value="{{ airport.code }} - {{ airport.name }}">
-                                {% endfor %}
-                            </datalist>
+                                   list="airportList" required autocomplete="off">
+                            <div class="invalid-feedback">
+                                Please select a valid airport
+                            </div>
                         </div>
 
                         <div class="col-md-6">
                             <label for="destination" class="form-label">Destination Airport</label>
                             <input type="text" class="form-control" id="destination" name="destination"
-                                   list="airportList" required>
+                                   list="airportList" required autocomplete="off">
+                            <div class="invalid-feedback">
+                                Please select a valid airport
+                            </div>
                         </div>
 
                         <!-- Schedule -->
@@ -76,14 +77,20 @@
                             <div class="input-group">
                                 <span class="input-group-text">RM</span>
                                 <input type="number" class="form-control" id="price" name="price"
-                                       min="50" step="10" value="300" required>
+                                       min="50" step="0.01" value="300.00" required>
+                            </div>
+                            <div class="invalid-feedback">
+                                Minimum price is RM50.00
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <label for="availableSeats" class="form-label">Available Seats</label>
                             <input type="number" class="form-control" id="availableSeats" name="availableSeats"
-                                   min="1" max="300" value="180" required>
+                                   min="1" max="180" value="180" required>
+                            <div class="invalid-feedback">
+                                Seats must be between 1-180
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -117,6 +124,9 @@
                             <label for="editFlightNum" class="form-label">Flight Number</label>
                             <input type="text" class="form-control" id="editFlightNum" name="flightNum" 
                                    pattern="[A-Z]{2,3}\d{3,4}" required>
+                            <div class="invalid-feedback">
+                                Valid flight number required
+                            </div>
                         </div>
 
                         <div class="col-md-6">
@@ -134,13 +144,13 @@
                         <div class="col-md-6">
                             <label for="editOrigin" class="form-label">Origin Airport</label>
                             <input type="text" class="form-control" id="editOrigin" name="origin"
-                                   list="airportList" required>
+                                   list="airportList" required autocomplete="off">
                         </div>
 
                         <div class="col-md-6">
                             <label for="editDestination" class="form-label">Destination Airport</label>
                             <input type="text" class="form-control" id="editDestination" name="destination"
-                                   list="airportList" required>
+                                   list="airportList" required autocomplete="off">
                         </div>
 
                         <!-- Schedule -->
@@ -165,14 +175,14 @@
                             <div class="input-group">
                                 <span class="input-group-text">RM</span>
                                 <input type="number" class="form-control" id="editPrice" name="price"
-                                       min="50" step="10" required>
+                                       min="50" step="0.01" required>
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <label for="editAvailableSeats" class="form-label">Available Seats</label>
                             <input type="number" class="form-control" id="editAvailableSeats" name="availableSeats"
-                                   min="0" max="300" required>
+                                   min="0" max="180" required>
                         </div>
                     </div>
                 </div>
@@ -186,3 +196,26 @@
         </form>
     </div>
 </div>
+
+<!-- Airport Datalist Template -->
+<datalist id="airportList">
+    {% for flight in flights %}
+        <option value="{{ flight.origin }}">{{ flight.origin }}</option>
+        <option value="{{ flight.destination }}">{{ flight.destination }}</option>
+    {% endfor %}
+</datalist>
+
+<!-- Add this JavaScript to your flight_modals.html -->
+<script>
+    document.getElementById('flightNum').addEventListener('input', function(e) {
+        this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    });
+    
+    document.getElementById('addFlightForm').addEventListener('submit', function(e) {
+        const flightNum = document.getElementById('flightNum').value;
+        if (!/^[A-Z]{2,3}\d{3,4}$/.test(flightNum)) {
+            e.preventDefault();
+            alert('Invalid flight number format! Example: MH123');
+        }
+    });
+    </script>

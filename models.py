@@ -33,12 +33,28 @@ class Flights(db.Model):
     date = db.Column(db.Date, nullable=False)
     price = db.Column(db.Float, nullable=False)
     availableSeats = db.Column(db.Integer, nullable=False)
-    bookings = db.relationship('Bookings', backref='flight', lazy=True)
+    bookings = db.relationship('Bookings', backref='flight', lazy=True, cascade='all, delete-orphan')  
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'flightNum': self.flightNum,
+            'airline': self.airline,
+            'origin': self.origin,
+            'destination': self.destination,
+            'date': self.date.isoformat(),
+            'departureTime': self.departureTime.strftime('%H:%M:%S'),
+            'arrivalTime': self.arrivalTime.strftime('%H:%M:%S'),
+            'price': float(self.price),
+            'availableSeats': self.availableSeats
+        }
 
 class Bookings(db.Model):
     __tablename__ = 'bookings'
     id = db.Column(db.Integer, primary_key=True)
+    bookingNum = db.Column(db.String(8), unique=True, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     flight_id = db.Column(db.Integer, db.ForeignKey('flights.id'), nullable=False)
     bookingDate = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    status = db.Column(db.String(20), nullable=False)
+    seatNum = db.Column(db.String(4), nullable=True)  # e.g., "A1", "B10"
+    bookingStatus = db.Column(db.String(20), default='Booked', nullable=False)
