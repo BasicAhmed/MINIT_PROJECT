@@ -60,7 +60,7 @@ footer a:hover {
 
 .needs-validation .form-control:invalid,
 .needs-validation .form-select:invalid {
-    border-color: #dc3545;
+    border-color: #c0c0c0;
 }
 
 .modal-header .btn-close-white {

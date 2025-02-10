@@ -45,33 +45,51 @@
                 </div>
             </div>
 
-            <!-- Seat Selection -->
+            <!-- Booking Form -->
             <form method="POST" action="{{ url_for('book_flight', flight_id=flight.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 
-                <h4 class="mb-4">Choose Your Seat</h4>
-                <div class="seat-map">
-                    <div class="row mb-3">
-                        <div class="col text-center text-muted">
-                            <small>Front of Aircraft →</small>
-                        </div>
-                    </div>
-                    
-                    <div class="seat-grid" id="seat-grid">
-                        <!-- Dynamically populated seats -->
-                    </div>
-                    
-                    <div class="row mt-3">
-                        <div class="col">
-                            <div class="seat-legend d-flex gap-3 justify-content-center">
-                                <div><span class="seat-available"></span> Available</div>
-                                <div><span class="seat-selected"></span> Selected</div>
-                                <div><span class="seat-booked"></span> Booked</div>
+                <!-- Passenger Count -->
+                <div class="mb-4">
+                    <label class="form-label">Number of Passengers</label>
+                    <select class="form-select" name="num_passengers" id="num_passengers" required>
+                        {% for n in range(1, 5) %}
+                        <option value="{{ n }}">{{ n }} Passenger{{ 's' if n > 1 }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Seat Selection -->
+                <div class="mb-4">
+                    <h4>Choose Your Seats (Optional - +5% per seat)</h4>
+                    <div class="seat-map">
+                        <div class="row mb-3">
+                            <div class="col text-center text-muted">
+                                <small>Front of Aircraft →</small>
                             </div>
                         </div>
+                        
+                        <div class="seat-grid" id="seat-grid">
+                            <!-- Dynamically populated seats -->
+                        </div>
+                        
+                        <div class="row mt-3">
+                            <div class="col">
+                                <div class="seat-legend d-flex gap-3 justify-content-center">
+                                    <div><span class="seat-available"></span> Available</div>
+                                    <div><span class="seat-selected"></span> Selected</div>
+                                    <div><span class="seat-booked"></span> Booked</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <input type="hidden" id="selected_seats" name="seats">
                     </div>
-                    
-                    <input type="hidden" id="seat_number" name="seat_number" required>
+                </div>
+
+                <!-- Passenger Names -->
+                <div id="passenger_fields" class="mb-4">
+                    <!-- Dynamic fields added by JavaScript -->
                 </div>
 
                 <!-- Price Summary -->
@@ -82,7 +100,7 @@
                             <p class="text-muted">Includes all taxes and fees</p>
                         </div>
                         <div class="col-md-6 text-end">
-                            <h3 class="text-primary">RM{{ flight.price }}</h3>
+                            <h3 class="text-primary" id="total_price">RM{{ flight.price }}</h3>
                         </div>
                     </div>
                 </div>
@@ -155,59 +173,90 @@
 document.addEventListener('DOMContentLoaded', function() {
     const flightId = {{ flight.id }};
     const seatGrid = document.getElementById('seat-grid');
-    const seatInput = document.getElementById('seat_number');
-    const errorMessage = document.getElementById('error-message');
+    const selectedSeatsInput = document.getElementById('selected_seats');
+    const passengerFields = document.getElementById('passenger_fields');
+    const numPassengersSelect = document.getElementById('num_passengers');
+    const totalPriceElement = document.getElementById('total_price');
+    const basePrice = {{ flight.price }};
+
+    let selectedSeats = new Set();
 
     // Load seats initially
     fetchSeats();
 
-    async function fetchSeats() {
-        try {
-            const response = await fetch(`/get_available_seats?flight_id=${flightId}`);
-            const data = await response.json();
-            
-            seatGrid.innerHTML = '';
-            
-            // Create seat map with row labels
-            const rows = ['A', 'B', 'C', 'D', 'E', 'F'];
-            rows.forEach(row => {
-                const rowLabel = document.createElement('div');
-                rowLabel.className = 'row-label text-muted';
-                rowLabel.textContent = row;
-                seatGrid.appendChild(rowLabel);
+    // Fetch available seats
+    // Updated seat grid generation in book_flight.html
+async function fetchSeats() {
+    try {
+        const response = await fetch(`/get_available_seats?flight_id=${flightId}`);
+        const data = await response.json();
+        
+        seatGrid.innerHTML = '';
+        
+        // Create seat map with 10 rows (A-J) and 6 seats per row
+        const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+        rows.forEach(row => {
+            const rowLabel = document.createElement('div');
+            rowLabel.className = 'row-label text-muted';
+            rowLabel.textContent = row;
+            seatGrid.appendChild(rowLabel);
 
-                for(let col = 1; col <= 10; col++) {
-                    const seat = `${row}${col}`;
-                    const seatElement = document.createElement('div');
-                    seatElement.className = `seat ${data.booked_seats.includes(seat) ? 'booked' : 'available'}`;
-                    seatElement.textContent = col;
-                    seatElement.dataset.seat = seat;
+            for(let col = 1; col <= 6; col++) {
+                const seat = `${row}${col}`;
+                const seatElement = document.createElement('div');
+                seatElement.className = `seat ${data.booked_seats.includes(seat) ? 'booked' : 'available'}`;
+                seatElement.textContent = col;
+                seatElement.dataset.seat = seat;
 
-                    if(!data.booked_seats.includes(seat)) {
-                        seatElement.addEventListener('click', handleSeatSelection);
-                    }
-
-                    seatGrid.appendChild(seatElement);
+                if(!data.booked_seats.includes(seat)) {
+                    seatElement.addEventListener('click', handleSeatSelection);
                 }
-            });
 
-        } catch (error) {
-            showError('Failed to load seat map. Please refresh the page.');
-        }
+                seatGrid.appendChild(seatElement);
+            }
+        });
+
+    } catch (error) {
+        console.error('Failed to load seat map:', error);
     }
+}
 
+    // Handle seat selection
     function handleSeatSelection(e) {
-        const selected = document.querySelector('.seat.selected');
-        if(selected) selected.classList.remove('selected');
-        e.target.classList.add('selected');
-        seatInput.value = e.target.dataset.seat;
+        const seat = e.target.dataset.seat;
+        if (selectedSeats.has(seat)) {
+            selectedSeats.delete(seat);
+            e.target.classList.remove('selected');
+        } else {
+            selectedSeats.add(seat);
+            e.target.classList.add('selected');
+        }
+        selectedSeatsInput.value = Array.from(selectedSeats).join(',');
+        updateTotalPrice();
     }
 
-    function showError(message) {
-        errorMessage.textContent = message;
-        errorMessage.classList.add('active');
-        setTimeout(() => errorMessage.classList.remove('active'), 5000);
+    // Update total price
+    function updateTotalPrice() {
+        const numPassengers = parseInt(numPassengersSelect.value);
+        const seatSurcharge = basePrice * 0.05 * selectedSeats.size;
+        const totalPrice = (basePrice * numPassengers) + seatSurcharge;
+        totalPriceElement.textContent = `RM${totalPrice.toFixed(2)}`;
     }
+
+    // Dynamic passenger fields
+    numPassengersSelect.addEventListener('change', () => {
+        const numPassengers = parseInt(numPassengersSelect.value);
+        passengerFields.innerHTML = '';
+        for (let i = 1; i <= numPassengers; i++) {
+            passengerFields.innerHTML += `
+                <div class="mb-3">
+                    <label class="form-label">Passenger ${i} Name</label>
+                    <input type="text" class="form-control" name="passenger_${i}_name" required>
+                </div>
+            `;
+        }
+        updateTotalPrice();
+    });
 
     // Prevent double form submission
     document.querySelector('form').addEventListener('submit', function(e) {

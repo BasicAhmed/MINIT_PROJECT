@@ -1,0 +1,183 @@
+
+@app.route('/search_flights', methods=['GET', 'POST'])
+@login_required
+def search_flights():
+    if request.method == 'POST':
+        try:
+            origin = request.form.get('origin', '').strip().upper()
+            destination = request.form.get('destination', '').strip().upper()
+            departure_date = datetime.strptime(request.form.get('departure_date'), '%Y-%m-%d').date()
+
+            flights = Flights.query.filter(
+                Flights.origin == origin,
+                Flights.destination == destination,
+                Flights.date == departure_date,
+                Flights.availableSeats > 0
+            ).all()
+
+            if not flights:
+                flash('No flights found. Try different dates or routes.', 'info')
+                return redirect(url_for('search_flights'))
+
+            return render_template('search_results.html', flights=flights)
+
+        except ValueError:
+            flash('Invalid date format', 'error')
+        except Exception as e:
+            flash(f'Search error: {str(e)}', 'error')
+
+    return render_template('search_flights.html', datetime=datetime)
+
+@app.route('/book_flight/<int:flight_id>', methods=['GET', 'POST'])
+@login_required
+def book_flight(flight_id):
+    flight = Flights.query.get_or_404(flight_id)
+    
+    if request.method == 'POST':
+        try:
+            if flight.availableSeats <= 0:
+                flash('No seats available', 'error')
+                return redirect(url_for('search_flights'))
+
+            booking = Bookings(
+                bookingNum=generate_booking_ref(),
+                user_id=current_user.id,
+                flight_id=flight.id,
+                seatNum=request.form.get('seat_number', '').upper() or None
+            )
+
+            flight.availableSeats -= 1
+            db.session.add(booking)
+            db.session.commit()
+            
+            return redirect(url_for('booking_confirmation', booking_ref=booking.bookingNum))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Booking failed: {str(e)}', 'error')
+    
+    return render_template('book_flight.html', flight=flight)
+
+def assign_seat(flight):
+    """Assigns a seat while maintaining airplane balance factors"""
+    # Get all booked seats for this flight
+    booked_seats = [booking.seatNum for booking in flight.bookings if booking.seatNum]
+    
+    # Define seat layout (6 seats per row, 10 rows)
+    rows = 'ABCDEF'
+    all_seats = [f"{row}{col}" for row in rows for col in range(1, 11)]
+    
+    # Get current balance counts
+    front_seats = 0
+    back_seats = 0
+    left_seats = 0
+    right_seats = 0
+    
+    for seat in booked_seats:
+        row = seat[0]
+        col = int(seat[1:])
+        
+        # Front/Back balance
+        if col <= 5:
+            front_seats += 1
+        else:
+            back_seats += 1
+            
+        # Left/Right balance
+        if row in {'A', 'B', 'C'}:
+            left_seats += 1
+        else:
+            right_seats += 1
+
+    # Find first available seat that maintains balance
+    for seat in all_seats:
+        if seat in booked_seats:
+            continue
+            
+        row = seat[0]
+        col = int(seat[1:])
+        
+        # Calculate potential new balances
+        new_front = front_seats + (1 if col <= 5 else 0)
+        new_back = back_seats + (1 if col > 5 else 0)
+        new_left = left_seats + (1 if row in {'A', 'B', 'C'} else 0)
+        new_right = right_seats + (1 if row in {'D', 'E', 'F'} else 0)
+        
+        # Check balance factors
+        front_back_diff = abs(new_front - new_back)
+        left_right_diff = abs(new_left - new_right)
+        
+        if front_back_diff <= 3 and left_right_diff <= 3:
+            return seat
+    
+    return None
+
+@app.route('/checkin/<string:booking_num>', methods=['POST'])
+@login_required
+def checkin(booking_num):
+    booking = Bookings.query.filter_by(
+        bookingNum=booking_num,
+        user_id=current_user.id
+    ).first_or_404()
+
+    if booking.bookingStatus == "Checked-in":
+        flash("Already checked-in", "error")
+        return jsonify(success=False)
+
+    if not booking.seatNum:
+        flight = booking.flight
+        assigned_seat = assign_seat(flight)
+        if not assigned_seat:
+            flash("No available seats maintaining balance", "error")
+            return jsonify(success=False)
+            
+        booking.seatNum = assigned_seat
+        flash(f"Assigned seat {assigned_seat}", "success")
+
+    booking.bookingStatus = "Checked-in"
+    db.session.commit()
+    flash("Check-in successful!", "success")
+    return jsonify(success=True)
+
+@app.route('/booking_confirmation/<booking_ref>')
+@login_required
+def booking_confirmation(booking_ref):
+    booking = Bookings.query.filter_by(bookingNum=booking_ref, user_id=current_user.id).first_or_404()
+    return render_template('booking_confirmation.html', booking=booking)
+
+@app.route('/manage_booking', methods=['GET', 'POST'])
+@login_required
+def manage_booking():
+    if request.method == 'POST':
+        booking_num = request.form.get('bookingNum', '').strip().upper()
+        booking = Bookings.query.filter_by(
+            bookingNum=booking_num, 
+            user_id=current_user.id
+        ).first()
+        
+        if not booking:
+            flash('No booking found with that reference', 'error')
+            return redirect(url_for('manage_booking'))
+            
+        return render_template('manage_booking.html', booking=booking)
+    
+    bookings = Bookings.query.filter_by(user_id=current_user.id).all()
+    return render_template('manage_booking.html', bookings=bookings)
+
+@app.route('/cancel_booking/<string:booking_num>', methods=['POST'])
+@login_required
+def cancel_booking(booking_num):
+    booking = Bookings.query.filter_by(
+        bookingNum=booking_num,
+        user_id=current_user.id
+    ).first_or_404()
+
+    try:
+        db.session.delete(booking)
+        db.session.commit()
+        flash('Booking cancelled successfully!', 'success')
+        return jsonify(success=True)
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error cancelling booking: {str(e)}', 'error')
+        return jsonify(success=False)

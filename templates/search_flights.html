@@ -2,67 +2,76 @@
 {% block title %}Search Flights{% endblock %}
 
 {% block content %}
-<!-- Add this near the top of base.html -->
-<div class="container mt-3">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-</div>
-
 <div class="container py-5">
     <div class="card shadow-lg">
         <div class="card-header bg-primary text-white">
             <h1 class="mb-0">Find Your Flight</h1>
         </div>
-        
         <div class="card-body">
-            <form method="POST" class="needs-validation" novalidate>
-                {{ form.hidden_tag() }}
-                
+            <!-- Search Form -->
+            <form id="search-form" class="needs-validation" method="GET" action="{{ url_for('search_flights') }}" novalidate>
                 <div class="row g-3">
                     <!-- Origin -->
-                    <div class="col-md-6">
-                        <label class="form-label">From</label>
-                        <input type="text" name="origin" 
-                               class="form-control" 
-                               placeholder="Enter origin airport (e.g. KUL)"
-                               required>
+                    <div class="col-md-6 position-relative">
+                        <label for="origin" class="form-label">From</label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="bi bi-geo-alt"></i>
+                            </span>
+                            <input type="text" id="origin" name="origin" 
+                                   class="form-control airport-autocomplete" 
+                                   placeholder="Enter origin airport" 
+                                   aria-label="Departure airport" 
+                                   required>
+                            <div id="origin-suggestions" class="autocomplete-dropdown"></div>
+                            <div class="invalid-feedback">
+                                Please select a departure airport.
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Destination -->
-                    <div class="col-md-6">
-                        <label class="form-label">To</label>
-                        <input type="text" name="destination" 
-                               class="form-control" 
-                               placeholder="Enter destination airport (e.g. SIN)"
-                               required>
+                    <div class="col-md-6 position-relative">
+                        <label for="destination" class="form-label">To</label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="bi bi-geo-alt-fill"></i>
+                            </span>
+                            <input type="text" id="destination" name="destination" 
+                                   class="form-control airport-autocomplete" 
+                                   placeholder="Enter destination airport" 
+                                   aria-label="Destination airport" 
+                                   required>
+                            <div id="destination-suggestions" class="autocomplete-dropdown"></div>
+                            <div class="invalid-feedback">
+                                Please select a destination airport.
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Date Selection -->
                     <div class="col-md-6">
-                        <label class="form-label">Departure Date</label>
-                        <input type="date" name="departure_date" 
+                        <label for="departure_date" class="form-label">Departure Date</label>
+                        <input type="date" id="departure_date" name="departure_date" 
                                class="form-control" 
-                               min="{{ datetime.utcnow().strftime('%Y-%m-%d') }}"
+                               min="{{ datetime.now().strftime('%Y-%m-%d') }}" 
                                required>
                     </div>
 
                     <!-- Passengers -->
                     <div class="col-md-6">
-                        <label class="form-label">Passengers</label>
-                        <select class="form-select" name="passengers" required>
-                            <option value="1">1 Adult</option>
-                            <option value="2">2 Adults</option>
-                            <option value="3">3 Adults</option>
-                            <option value="4">4 Adults</option>
-                        </select>
+                        <label for="passengers" class="form-label">Passengers</label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="bi bi-people"></i>
+                            </span>
+                            <select class="form-select" id="passengers" name="passengers" required>
+                                <option value="1">1 Adult</option>
+                                <option value="2">2 Adults</option>
+                                <option value="3">3 Adults</option>
+                                <option value="4">4 Adults</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -74,52 +83,131 @@
             </form>
 
             <!-- Results Section -->
-            {% if flights %}
-            <div class="mt-5">
-                <h4 class="mb-4">{{ flights|length }} Flights Found</h4>
-                <div class="row g-3">
-                    {% for flight in flights %}
-                    <div class="col-md-6">
-                        <div class="flight-card p-3 mb-3 bg-white shadow-sm">
-                            <div class="d-flex justify-content-between align-items-start mb-3">
-                                <div>
-                                    <h5 class="mb-1">{{ flight.airline }}</h5>
-                                    <small class="text-muted">{{ flight.flightNum }}</small>
-                                </div>
-                                <div class="text-primary fs-4">
-                                    RM{{ "%.2f"|format(flight.price) }}
-                                </div>
-                            </div>
-                            
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <div class="fw-bold">{{ flight.origin }}</div>
-                                    <div class="text-muted">{{ flight.departureTime.strftime('%H:%M') }}</div>
-                                </div>
-                                <div class="col-6 text-end">
-                                    <div class="fw-bold">{{ flight.destination }}</div>
-                                    <div class="text-muted">{{ flight.arrivalTime.strftime('%H:%M') }}</div>
-                                </div>
-                            </div>
-                            
-                            <hr class="my-2">
-                            
-                            <div class="d-flex justify-content-between align-items-center">
-                                <small class="text-muted">
-                                    {{ flight.availableSeats }} seats available
-                                </small>
-                                <a href="{{ url_for('book_flight', flight_id=flight.id) }}" 
-                                   class="btn btn-sm btn-primary">
-                                    Book Now <i class="bi bi-arrow-right"></i>
-                                </a>
-                            </div>
-                        </div>
+            <div class="mt-5" id="results-section">
+                <div class="text-center py-4" id="loading-spinner" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
                     </div>
-                    {% endfor %}
+                    <p class="mt-2">Searching for flights...</p>
                 </div>
+
+                <div class="alert alert-danger mt-3" id="error-message" style="display: none;"></div>
+
+                <div id="flight-results" class="row g-3 mt-3"></div>
             </div>
-            {% endif %}
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Autocomplete Functionality
+    document.querySelectorAll('.airport-autocomplete').forEach(input => {
+        input.addEventListener('input', function () {
+            const query = this.value.trim();
+            const suggestionsDiv = document.getElementById(`${this.id}-suggestions`);
+
+            if (query.length < 2) {
+                suggestionsDiv.innerHTML = '';
+                return;
+            }
+
+            fetch(`/get_airports?query=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data || data.length === 0) {
+                        suggestionsDiv.innerHTML = '<div class="text-muted">No matches found</div>';
+                        return;
+                    }
+
+                    suggestionsDiv.innerHTML = data.map(airport => `
+                        <div class="autocomplete-suggestion p-2"
+                             data-code="${airport.code}"
+                             onclick="selectAirport('${this.id}', '${airport.code}')">
+                            <div class="fw-bold">${airport.code}</div>
+                            <small class="text-muted">${airport.name}</small>
+                        </div>
+                    `).join('');
+                    suggestionsDiv.style.display = 'block';
+                })
+                .catch(() => {
+                    suggestionsDiv.innerHTML = '<div class="text-danger">Error loading suggestions</div>';
+                });
+        });
+    });
+
+    function selectAirport(inputId, code) {
+        const input = document.getElementById(inputId);
+        input.value = code;
+        document.getElementById(`${inputId}-suggestions`).innerHTML = '';
+    }
+
+    document.addEventListener('click', function (e) {
+        document.querySelectorAll('.autocomplete-dropdown').forEach(dropdown => {
+            if (!dropdown.contains(e.target)) dropdown.innerHTML = '';
+        });
+    });
+
+    // Search Form Handling
+    document.getElementById('search-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        if (!this.checkValidity()) {
+            this.classList.add('was-validated');
+            return;
+        }
+
+        clearResults();
+        toggleLoading(true);
+
+        const formData = new FormData(this);
+        const searchParams = new URLSearchParams(formData);
+
+        fetch(`/search_flights?${searchParams.toString()}`, {
+            method: 'GET',
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) throw new Error(data.error);
+                displayResults(data);
+            })
+            .catch(error => showError(error.message))
+            .finally(() => toggleLoading(false));
+    });
+
+    function toggleLoading(show) {
+        document.getElementById('loading-spinner').style.display = show ? 'block' : 'none';
+    }
+
+    function showError(message) {
+        const errorDiv = document.getElementById('error-message');
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
+
+    function clearResults() {
+        document.getElementById('flight-results').innerHTML = '';
+        document.getElementById('error-message').style.display = 'none';
+    }
+
+    function displayResults(data) {
+    const resultsContainer = document.getElementById('flight-results');
+    if (data.length === 0) {
+        resultsContainer.innerHTML = '<p class="text-muted">No flights found.</p>';
+        return;
+    }
+    resultsContainer.innerHTML = data.map(flight => `
+        <div class="col-md-6">
+            <div class="card p-3">
+                <h5>${flight.airline}</h5>
+                <p>${flight.origin} to ${flight.destination}</p>
+                <p>${flight.departureTime} - ${flight.arrivalTime}</p>
+                <p class="text-primary fw-bold">$${flight.price}</p>
+                <a href="/book_flight/${flight.id}" class="btn btn-primary">Book Now</a>
+            </div>
+        </div>
+    `).join('');
+}
+</script>
 {% endblock %}
