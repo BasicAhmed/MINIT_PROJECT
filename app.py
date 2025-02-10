@@ -2,6 +2,8 @@ from flask import Flask, render_template, redirect, url_for, request, flash, jso
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user, login_user, logout_user, login_required
 from flask_wtf import CSRFProtect
+from flask import (render_template, redirect, url_for, request, 
+                  flash, jsonify, make_response, send_file)
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
@@ -175,13 +177,10 @@ def profile_settings():
             new_password = request.form.get('new_password')
             confirm_password = request.form.get('confirm_password')
 
-            if any([
-                request.form.get('email') != current_user.email,
-                request.form.get('username') != current_user.username,
-                new_password
-            ]):
-                if not current_password or not current_user.check_password(current_password):
-                    flash('Current password is required for these changes', 'error')
+            # Always verify current password if provided
+            if current_password:
+                if not current_user.check_password(current_password):
+                    flash('Current password is incorrect', 'error')
                     return redirect(url_for('user_dashboard'))
 
             fields_to_check = {
@@ -192,13 +191,30 @@ def profile_settings():
             }
 
             for field, value in fields_to_check.items():
-                existing = Users.query.filter(
-                    getattr(Users, field) == value,
-                    Users.id != current_user.id
-                ).first()
-                if existing:
-                    flash(f'{field.capitalize()} already exists!', 'error')
+                if value != getattr(current_user, field):  # Only check if value changed
+                    # Require password for sensitive field changes
+                    if field in ['email', 'username'] and not current_password:
+                        flash('Current password is required to change email or username', 'error')
+                        return redirect(url_for('user_dashboard'))
+                    
+                    existing = Users.query.filter(
+                        getattr(Users, field) == value,
+                        Users.id != current_user.id
+                    ).first()
+                    if existing:
+                        flash(f'{field.capitalize()} already exists!', 'error')
+                        return redirect(url_for('user_dashboard'))
+
+            # Handle password change
+            if new_password:
+                if not current_password:
+                    flash('Current password is required to set new password', 'error')
                     return redirect(url_for('user_dashboard'))
+                
+                if new_password != confirm_password:
+                    flash('New passwords do not match!', 'error')
+                    return redirect(url_for('user_dashboard'))
+                current_user.set_password(new_password)
 
             # Update profile fields
             current_user.name = request.form['name']
@@ -206,13 +222,6 @@ def profile_settings():
             current_user.phoneNumber = request.form['phoneNumber']
             current_user.username = request.form['username']
             current_user.email = request.form['email']
-
-            # Handle password change
-            if new_password:
-                if new_password != confirm_password:
-                    flash('New passwords do not match!', 'error')
-                    return redirect(url_for('user_dashboard'))
-                current_user.set_password(new_password)
 
             db.session.commit()
             flash('Profile updated successfully!', 'success')
