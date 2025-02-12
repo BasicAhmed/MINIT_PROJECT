@@ -198,7 +198,7 @@ def profile_settings():
                         Users.id != current_user.id
                     ).first()
                     if existing:
-                        flash(f'{field.capitalize()} already exists!', 'error')
+                        flash('User details already exists!', 'error')
                         return redirect(url_for('user_dashboard'))
 
             # Handle password change
