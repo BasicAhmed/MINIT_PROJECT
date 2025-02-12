@@ -2,8 +2,6 @@ from flask import Flask, render_template, redirect, url_for, request, flash, jso
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user, login_user, logout_user, login_required
 from flask_wtf import CSRFProtect
-from flask import (render_template, redirect, url_for, request, 
-                  flash, jsonify, make_response, send_file)
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
@@ -177,10 +175,13 @@ def profile_settings():
             new_password = request.form.get('new_password')
             confirm_password = request.form.get('confirm_password')
 
-            # Always verify current password if provided
-            if current_password:
-                if not current_user.check_password(current_password):
-                    flash('Current password is incorrect', 'error')
+            if any([
+                request.form.get('email') != current_user.email,
+                request.form.get('username') != current_user.username,
+                new_password
+            ]):
+                if not current_password or not current_user.check_password(current_password):
+                    flash('Current password is required for these changes', 'error')
                     return redirect(url_for('user_dashboard'))
 
             fields_to_check = {
@@ -205,23 +206,19 @@ def profile_settings():
                         flash('User details already exists!', 'error')
                         return redirect(url_for('user_dashboard'))
 
-            # Handle password change
-            if new_password:
-                if not current_password:
-                    flash('Current password is required to set new password', 'error')
-                    return redirect(url_for('user_dashboard'))
-                
-                if new_password != confirm_password:
-                    flash('New passwords do not match!', 'error')
-                    return redirect(url_for('user_dashboard'))
-                current_user.set_password(new_password)
-
             # Update profile fields
             current_user.name = request.form['name']
             current_user.icNumber = request.form['icNumber']
             current_user.phoneNumber = request.form['phoneNumber']
             current_user.username = request.form['username']
             current_user.email = request.form['email']
+
+            # Handle password change
+            if new_password:
+                if new_password != confirm_password:
+                    flash('New passwords do not match!', 'error')
+                    return redirect(url_for('user_dashboard'))
+                current_user.set_password(new_password)
 
             db.session.commit()
             flash('Profile updated successfully!', 'success')
