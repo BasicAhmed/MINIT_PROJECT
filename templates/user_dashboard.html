@@ -43,14 +43,13 @@
                                 {{ booking.flight.departureTime.strftime('%H:%M') }}
                             </div>
                         </div>
-
                         <div class="booking-actions">
-                            <button class="btn btn-sm btn-outline-primary"
-                                    data-bs-toggle="modal" 
-                                    data-bs-target="#manageBookingModal{{ booking.id }}">
+                            <a href="{{ url_for('manage_booking', booking_num=booking.bookingNum) }}" 
+                               class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-pencil"></i> Manage
-                            </button>
+                            </a>
                         </div>
+                        
                     </div>
                 </div>
                 {% endfor %}

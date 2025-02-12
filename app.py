@@ -11,13 +11,15 @@ import random
 import string
 import json
 import io
+import qrcode
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 from flask import abort
 from functools import wraps
+import secrets
 
 
-# Import the db object from your extensions module (or adjust if importing from __init__)
 from extensions import db
 
 from models import Users, Flights, Bookings
@@ -37,7 +39,6 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///flyin.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    # Initialize db, login_manager, and csrf with the app
     db.init_app(app)
     login_manager.init_app(app)
     csrf.init_app(app)
@@ -53,7 +54,7 @@ def create_app():
         return Users.query.get(int(user_id))
 
     with app.app_context():
-        db.create_all()  # Ensure all tables are created
+        db.create_all()  
 
     return app
 
@@ -68,13 +69,20 @@ def generate_booking_ref():
         if not Bookings.query.filter_by(bookingNum=ref).first():
             return ref
 
+def generate_seat_map(booked_seats):
+    seats = []
+    for row in "ABCDEFGHIJ": 
+        for seat_num in range(1, 7):  
+            seats.append(f"{row}{seat_num}")
+    return seats
+
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not current_user.is_authenticated:
             return login_manager.unauthorized()
         if not current_user.is_admin:
-            abort(403)  # Forbidden
+            abort(403)  
         return f(*args, **kwargs)
     return decorated
 
@@ -84,13 +92,11 @@ def admin_required(f):
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        # Validate required fields
         required_fields = ['icNumber', 'name', 'phoneNumber', 'email', 'username', 'password']
         if not all(field in request.form for field in required_fields):
             flash('All fields are required!', 'error')
             return redirect(url_for('register'))
 
-        # Check for existing user
         existing_user = Users.query.filter(
             (Users.email == request.form['email']) | 
             (Users.username == request.form['username']) | 
@@ -101,7 +107,6 @@ def register():
             flash('User already exists with these details!', 'error')
             return redirect(url_for('register'))
 
-        # Create user
         try:
             new_user = Users(
                 icNumber=request.form['icNumber'],
@@ -109,7 +114,7 @@ def register():
                 phoneNumber=request.form['phoneNumber'],
                 email=request.form['email'],
                 username=request.form['username'],
-                is_admin=False  # Explicitly set default
+                is_admin=False  
             )
             new_user.set_password(request.form['password'])
             db.session.add(new_user)
@@ -178,7 +183,6 @@ def profile_settings():
                     flash('Current password is incorrect', 'error')
                     return redirect(url_for('user_dashboard'))
 
-            # Check unique constraints
             fields_to_check = {
                 'email': request.form['email'],
                 'username': request.form['username'],
@@ -228,124 +232,105 @@ def profile_settings():
 
     return redirect(url_for('user_dashboard'))
 
-from flask import request, render_template, jsonify
-from flask_login import login_required
-from datetime import datetime
-
-from datetime import datetime, time
-
-@app.route('/search_flights', methods=['GET', 'POST'])
-@login_required
+@app.route('/search_flights', methods=['GET'])
 def search_flights():
-    if request.method == 'POST':
-        try:
-            origin = request.form.get('origin', '').strip().upper()
-            destination = request.form.get('destination', '').strip().upper()
-            departure_date = datetime.strptime(request.form.get('departure_date'), '%Y-%m-%d').date()
+    origin = request.args.get('origin')
+    destination = request.args.get('destination')
+    departure_date = request.args.get('departure_date')
+    passengers = request.args.get('passengers', type=int, default=1)
 
-            flights = Flights.query.filter(
-                Flights.origin == origin,
-                Flights.destination == destination,
-                Flights.date == departure_date,
-                Flights.availableSeats > 0
-            ).all()
+    if origin or destination or departure_date:
+        flights_query = Flights.query
 
-            if not flights:
-                flash('No flights found. Try different dates or routes.', 'info')
-                return redirect(url_for('search_flights'))
+        if origin:
+            flights_query = flights_query.filter(Flights.origin.ilike(f'%{origin}%'))
+        if destination:
+            flights_query = flights_query.filter(Flights.destination.ilike(f'%{destination}%'))
+        if departure_date:
+            try:
+                departure_date = datetime.strptime(departure_date, '%Y-%m-%d').date()
+                flights_query = flights_query.filter(Flights.date == departure_date)
+            except ValueError:
+                return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
 
-            return render_template('search_results.html', flights=flights)
+        flights_query = flights_query.filter(Flights.availableSeats >= passengers)
+        flights = flights_query.all() 
 
-        except ValueError:
-            flash('Invalid date format', 'error')
-        except Exception as e:
-            flash(f'Search error: {str(e)}', 'error')
+        return jsonify([flight.to_dict() for flight in flights])  
+    else:
+        flights = Flights.query.all() 
+        return render_template('search_flights.html', datetime=datetime, flights=flights)
 
-    return render_template('search_flights.html', datetime=datetime)
 
 @app.route('/book_flight/<int:flight_id>', methods=['GET', 'POST'])
 @login_required
 def book_flight(flight_id):
-    flight = Flights.query.get_or_404(flight_id)
+    flight = Flights.query.get_or_404(flight_id)  
     
     if request.method == 'POST':
-        try:
-            if flight.availableSeats <= 0:
-                flash('No seats available', 'error')
-                return redirect(url_for('search_flights'))
+        num_passengers = int(request.form.get('num_passengers', 1))
+        passenger_names = [request.form.get(f'passenger_{i+1}_name') for i in range(num_passengers)]
+        selected_seats = request.form.get('seats', '').split(',') 
 
+        # Validate passenger names
+        if not all(passenger_names):
+            flash("Please provide names for all passengers.", "danger")
+            return redirect(url_for('book_flight', flight_id=flight_id))
+        
+        # Validate seats
+        booked_seats = [b.seatNum for b in flight.bookings if b.seatNum]
+        valid_seats = generate_seat_map(booked_seats)  
+        
+        invalid_seats = []
+        for seat in selected_seats:
+            if seat.strip() == '':  
+                continue
+            if seat in booked_seats or seat not in valid_seats:
+                invalid_seats.append(seat)
+        
+        if invalid_seats:
+            flash(f"Invalid/occupied seats: {', '.join(invalid_seats)}", "danger")
+            return redirect(url_for('book_flight', flight_id=flight_id))
+        
+        # Calculate total price
+        base_price = flight.price * num_passengers
+        seat_surcharge = flight.price * 0.05 * len(selected_seats)
+        total_price = base_price + seat_surcharge
+        
+        # Create bookings
+        for i in range(num_passengers):
             booking = Bookings(
-                bookingNum=generate_booking_ref(),
+                bookingNum=f"BK-{secrets.token_hex(3).upper()}",  # Unique booking number
                 user_id=current_user.id,
                 flight_id=flight.id,
-                seatNum=request.form.get('seat_number', '').upper() or None
+                seatNum=selected_seats[i] if i < len(selected_seats) else None,
+                bookingStatus='Booked'
             )
-
-            flight.availableSeats -= 1
             db.session.add(booking)
-            db.session.commit()
-            
-            return redirect(url_for('booking_confirmation', booking_ref=booking.bookingNum))
+        
+        # Update available seats
+        flight.availableSeats -= num_passengers
+        
+        db.session.commit()
+        
+        flash("Booking successful!", "success")
+        return redirect(url_for('manage_booking'))
+    
+    booked_seats = [b.seatNum for b in flight.bookings if b.seatNum]
+    seat_map = generate_seat_map(booked_seats)
+    return render_template('book_flight.html', 
+                         flight=flight,
+                         seat_map=seat_map,
+                         rows="ABCDEFGHIJ")
 
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Booking failed: {str(e)}', 'error')
-    
-    return render_template('book_flight.html', flight=flight)
-
-def assign_seat(flight):
-    """Assigns a seat while maintaining airplane balance factors"""
-    # Get all booked seats for this flight
-    booked_seats = [booking.seatNum for booking in flight.bookings if booking.seatNum]
-    
-    # Define seat layout (6 seats per row, 10 rows)
-    rows = 'ABCDEF'
-    all_seats = [f"{row}{col}" for row in rows for col in range(1, 11)]
-    
-    # Get current balance counts
-    front_seats = 0
-    back_seats = 0
-    left_seats = 0
-    right_seats = 0
-    
-    for seat in booked_seats:
-        row = seat[0]
-        col = int(seat[1:])
-        
-        # Front/Back balance
-        if col <= 5:
-            front_seats += 1
-        else:
-            back_seats += 1
-            
-        # Left/Right balance
-        if row in {'A', 'B', 'C'}:
-            left_seats += 1
-        else:
-            right_seats += 1
-
-    # Find first available seat that maintains balance
-    for seat in all_seats:
-        if seat in booked_seats:
-            continue
-            
-        row = seat[0]
-        col = int(seat[1:])
-        
-        # Calculate potential new balances
-        new_front = front_seats + (1 if col <= 5 else 0)
-        new_back = back_seats + (1 if col > 5 else 0)
-        new_left = left_seats + (1 if row in {'A', 'B', 'C'} else 0)
-        new_right = right_seats + (1 if row in {'D', 'E', 'F'} else 0)
-        
-        # Check balance factors
-        front_back_diff = abs(new_front - new_back)
-        left_right_diff = abs(new_left - new_right)
-        
-        if front_back_diff <= 3 and left_right_diff <= 3:
-            return seat
-    
-    return None
+@app.route('/manage_booking', methods=['GET'])
+@login_required
+def manage_booking():
+    booking = Bookings.query.filter_by(user_id=current_user.id).order_by(Bookings.id.desc()).first()  # Get the latest booking
+    if not booking:
+        flash('No bookings found.', 'info')
+        return redirect(url_for('home')) 
+    return render_template('manage_booking.html', booking=booking)
 
 @app.route('/checkin/<string:booking_num>', methods=['POST'])
 @login_required
@@ -357,81 +342,108 @@ def checkin(booking_num):
 
     if booking.bookingStatus == "Checked-in":
         flash("Already checked-in", "error")
-        return jsonify(success=False)
+        return render_template("manage_booking.html", booking=booking)
 
     if not booking.seatNum:
         flight = booking.flight
         assigned_seat = assign_seat(flight)
         if not assigned_seat:
             flash("No available seats maintaining balance", "error")
-            return jsonify(success=False)
-            
+            return render_template("manage_booking.html", booking=booking)
+
         booking.seatNum = assigned_seat
         flash(f"Assigned seat {assigned_seat}", "success")
 
     booking.bookingStatus = "Checked-in"
     db.session.commit()
     flash("Check-in successful!", "success")
-    return jsonify(success=True)
 
-@app.route('/booking_confirmation/<booking_ref>')
-@login_required
-def booking_confirmation(booking_ref):
-    booking = Bookings.query.filter_by(bookingNum=booking_ref, user_id=current_user.id).first_or_404()
-    return render_template('booking_confirmation.html', booking=booking)
+    return render_template("manage_booking.html", booking=booking)
 
-@app.route('/manage_booking', methods=['GET', 'POST'])
-@login_required
-def manage_booking():
-    if request.method == 'POST':
-        booking_num = request.form.get('bookingNum', '').strip().upper()
-        booking = Bookings.query.filter_by(
-            bookingNum=booking_num, 
-            user_id=current_user.id
-        ).first()
-        
-        if not booking:
-            flash('No booking found with that reference', 'error')
-            return redirect(url_for('manage_booking'))
-            
-        return render_template('manage_booking.html', booking=booking)
-    
-    bookings = Bookings.query.filter_by(user_id=current_user.id).all()
-    return render_template('manage_booking.html', bookings=bookings)
 
 @app.route('/cancel_booking/<string:booking_num>', methods=['POST'])
 @login_required
 def cancel_booking(booking_num):
-    booking = Bookings.query.filter_by(
-        bookingNum=booking_num,
-        user_id=current_user.id
-    ).first_or_404()
+    booking = Bookings.query.filter_by(bookingNum=booking_num).first_or_404()
 
+    # Ensure the booking belongs to the current user
+    if booking.user_id != current_user.id:
+        flash('You are not authorized to cancel this booking.', 'error')
+        return redirect(url_for('manage_booking'))
+
+    # Update available seats
+    flight = Flights.query.get(booking.flight_id)
+    if flight:
+        flight.availableSeats += 1
+
+    db.session.delete(booking)
     try:
-        db.session.delete(booking)
         db.session.commit()
-        flash('Booking cancelled successfully!', 'success')
-        return jsonify(success=True)
+        flash('Booking successfully canceled.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error cancelling booking: {str(e)}', 'error')
-        return jsonify(success=False)
+        flash(f'Error canceling booking: {str(e)}', 'error')
 
-@app.route('/download_ticket/<booking_ref>')
-def download_ticket(booking_ref):
-    booking = Bookings.query.filter_by(bookingNum=booking_ref).first_or_404()
-    
+    return redirect(url_for('user_dashboard'))
+
+@app.route('/download_ticket/<string:booking_num>', methods=['GET'])
+@login_required
+def download_ticket(booking_num):
+    booking = Bookings.query.filter_by(bookingNum=booking_num).first_or_404()
+
+    # Ensure the booking belongs to the logged-in user
+    if booking.user_id != current_user.id:
+        flash('You are not authorized to download this ticket.', 'error')
+        return redirect(url_for('manage_booking'))
+
+    # Get passenger details
+    passenger_name = current_user.name
+
+    # Get flight details
+    flight = Flights.query.get(booking.flight_id)
+    if not flight:
+        flash('Flight details not found.', 'error')
+        return redirect(url_for('manage_booking'))
+
+    # Generate QR Code
+    qr_data = f"BookingRef: {booking.bookingNum}\nPassenger: {passenger_name}\nFlight: {flight.flightNum}\nSeat: {booking.seatNum}"
+    qr = qrcode.make(qr_data)
+
+    # Save QR code to buffer
+    qr_buffer = io.BytesIO()
+    qr.save(qr_buffer, format="PNG")
+    qr_buffer.seek(0)
+
+    # Generate PDF
     buffer = io.BytesIO()
-    p = canvas.Canvas(buffer)
-    
-    # Add ticket content
-    p.drawString(100, 700, f"Ticket for {booking.user.name}")
-    p.drawString(100, 680, f"Flight: {booking.flight.flightNum}")
-    p.drawString(100, 660, f"Seat: {booking.seatNum}")
-    
-    p.save()
+    c = canvas.Canvas(buffer)
+
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(200, 780, "Skybook Flight Ticket")
+
+    c.setFont("Helvetica", 12)
+    c.drawString(100, 740, f"Passenger Name: {passenger_name}")
+    c.drawString(100, 720, f"Booking Reference: {booking.bookingNum}")
+    c.drawString(100, 700, f"Flight Number: {flight.flightNum}")
+    c.drawString(100, 680, f"Airline: {flight.airline}")
+    c.drawString(100, 660, f"Origin: {flight.origin}")
+    c.drawString(100, 640, f"Destination: {flight.destination}")
+    c.drawString(100, 620, f"Departure Time: {flight.departureTime.strftime('%H:%M')}")
+    c.drawString(100, 600, f"Arrival Time: {flight.arrivalTime.strftime('%H:%M')}")
+    c.drawString(100, 580, f"Flight Date: {flight.date.strftime('%d-%m-%Y')}")
+    c.drawString(100, 560, f"Seat Number: {booking.seatNum}")
+    c.drawString(100, 540, f"Status: {booking.bookingStatus}")
+
+    qr_image = ImageReader(qr_buffer)
+    c.drawImage(qr_image, 400, 620, width=100, height=100)
+
+    c.showPage()
+    c.save()
     buffer.seek(0)
-    return send_file(buffer, as_attachment=True, download_name=f"ticket_{booking_ref}.pdf")
+
+    return send_file(buffer, as_attachment=True, download_name=f"ticket_{booking_num}.pdf", mimetype='application/pdf')
+
+
 
 # --------------------------
 # ADMIN ROUTES
@@ -571,28 +583,90 @@ def get_airports():
     if len(query) < 2:
         return jsonify([])
 
-    # Get unique airports from existing flights
-    origins = db.session.query(Flights.origin).filter(
-        Flights.origin.ilike(f'%{query}%')
-    ).distinct().all()
+    try:
+        # Get unique airports from existing flights
+        origins = db.session.query(Flights.origin).filter(
+            Flights.origin.ilike(f'%{query}%')
+        ).distinct().all()
 
-    destinations = db.session.query(Flights.destination).filter(
-        Flights.destination.ilike(f'%{query}%')
-    ).distinct().all()
+        destinations = db.session.query(Flights.destination).filter(
+            Flights.destination.ilike(f'%{query}%')
+        ).distinct().all()
 
-    suggestions = [{'code': o[0], 'name': ''} for o in origins] + \
-                 [{'code': d[0], 'name': ''} for d in destinations]
+        # Combine and deduplicate suggestions
+        suggestions = list(set([o[0] for o in origins] + [d[0] for d in destinations]))
+        suggestions = [{'code': code, 'name': ''} for code in suggestions[:10]]  # Limit to 10
 
-    return jsonify(suggestions[:10])  # Limit to 10 suggestions
-
-@app.route('/get_available_seats', methods=['GET'])
-@login_required
+        return jsonify(suggestions)
+    except Exception as e:
+        app.logger.error(f"Error fetching airports: {str(e)}")
+        return jsonify([])
+    
+@app.route('/get_available_seats')
 def get_available_seats():
-    flight_id = request.args.get('flight_id')
+    flight_id = request.args.get('flight_id', type=int)
     flight = Flights.query.get_or_404(flight_id)
-    booked_seats = [b.seatNum for b in flight.bookings if b.seatNum]
-    all_seats = [f"{row}{col}" for row in 'ABCDEF' for col in range(1, 11)]
-    return jsonify({'available_seats': [s for s in all_seats if s not in booked_seats]})
+    
+    booked_seats = [booking.seatNum for booking in flight.bookings if booking.seatNum]
+    
+    return jsonify({
+        'booked_seats': booked_seats,
+        'total_seats': 60  # 10 rows (A-J) x 6 seats per row
+    })
+
+def assign_seat(flight):
+    """Assigns a seat while maintaining airplane balance factors"""
+    # Get all booked seats for this flight
+    booked_seats = [booking.seatNum for booking in flight.bookings if booking.seatNum]
+    
+    # Define seat layout (6 seats per row, 10 rows)
+    rows = 'ABCDEF'
+    all_seats = [f"{row}{col}" for row in rows for col in range(1, 11)]
+    
+    # Get current balance counts
+    front_seats = 0
+    back_seats = 0
+    left_seats = 0
+    right_seats = 0
+    
+    for seat in booked_seats:
+        row = seat[0]
+        col = int(seat[1:])
+        
+        # Front/Back balance
+        if col <= 5:
+            front_seats += 1
+        else:
+            back_seats += 1
+            
+        # Left/Right balance
+        if row in {'A', 'B', 'C'}:
+            left_seats += 1
+        else:
+            right_seats += 1
+
+    # Find first available seat that maintains balance
+    for seat in all_seats:
+        if seat in booked_seats:
+            continue
+            
+        row = seat[0]
+        col = int(seat[1:])
+        
+        # Calculate potential new balances
+        new_front = front_seats + (1 if col <= 5 else 0)
+        new_back = back_seats + (1 if col > 5 else 0)
+        new_left = left_seats + (1 if row in {'A', 'B', 'C'} else 0)
+        new_right = right_seats + (1 if row in {'D', 'E', 'F'} else 0)
+        
+        # Check balance factors
+        front_back_diff = abs(new_front - new_back)
+        left_right_diff = abs(new_left - new_right)
+        
+        if front_back_diff <= 3 and left_right_diff <= 3:
+            return seat
+    
+    return None
 
 @app.errorhandler(403)
 def forbidden(error):
